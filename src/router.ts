@@ -128,6 +128,15 @@ type ParseRoutesConfig = {
   layout?: CustomElementClass;
 };
 
+function isCustomElementClass(
+    value: unknown,
+): value is CustomElementClass {
+    return (
+        typeof value === "function" &&
+        value.prototype instanceof CustomElement
+    );
+}
+
 class Router<TApp extends App> {
   protected readonly _app: TApp;
   protected readonly _baseLayout: CustomElementClass;
@@ -160,7 +169,7 @@ class Router<TApp extends App> {
 
     if (
       !baseLayout ||
-      !(baseLayout instanceof CustomElement)
+      !isCustomElementClass(baseLayout)
     ) {
       throw new Error(
         "Missing base layout element for the application",

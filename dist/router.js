@@ -38,6 +38,10 @@ export class UnsupportedRouteParameterType extends Error {
         this.name = "UnsupportedRouteParameterType";
     }
 }
+function isCustomElementClass(value) {
+    return (typeof value === "function" &&
+        value.prototype instanceof CustomElement);
+}
 class Router {
     _app;
     _baseLayout;
@@ -57,7 +61,7 @@ class Router {
             throw new Error("Missing routes object for router");
         }
         if (!baseLayout ||
-            !(baseLayout instanceof CustomElement)) {
+            !isCustomElementClass(baseLayout)) {
             throw new Error("Missing base layout element for the application");
         }
         this._app = app;
