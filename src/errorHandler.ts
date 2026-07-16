@@ -1,0 +1,124 @@
+import App from "./app.js";
+
+export type ErrorConstructor<TError extends Error = Error> = abstract new (
+    ...args: any[]
+) => TError;
+
+export type ErrorHandlerMethod<TError extends Error = Error> = (
+    error: TError
+) => void | Promise<void>;
+
+const HANDLED_ERRORS = Symbol("handledErrors");
+
+type DecoratedHandler = ErrorHandlerMethod & {
+    [HANDLED_ERRORS]?: readonly ErrorConstructor[];
+};
+
+export function handles(
+    ...errorTypes: ErrorConstructor[]
+): MethodDecorator {
+    if (errorTypes.length === 0) {
+        throw new Error("@handles requires at least one Error class.");
+    }
+
+    return (
+        _target: object,
+        _propertyKey: string | symbol,
+        descriptor: PropertyDescriptor
+    ): void => {
+        const method = descriptor.value as DecoratedHandler | undefined;
+
+        if (typeof method !== "function") {
+            throw new TypeError("@handles can only decorate methods.");
+        }
+
+        method[HANDLED_ERRORS] = errorTypes;
+    };
+}
+
+export default class ErrorHandler<TApp extends App> {
+    protected readonly _app: TApp;
+
+    protected readonly _handlerMethods: Record<
+        string,
+        ErrorHandlerMethod
+    >;
+
+    constructor(app: TApp) {
+        this._app = app;
+        this._handlerMethods = this._generateHandlerMethodsMapping();
+    }
+
+    protected _generateHandlerMethodsMapping(): Record<
+        string,
+        ErrorHandlerMethod
+    > {
+        const handlers: Record<string, ErrorHandlerMethod> = {};
+
+        let prototype: object | null = Object.getPrototypeOf(this);
+
+        while (
+            prototype &&
+            prototype !== ErrorHandler.prototype &&
+            prototype !== Object.prototype
+        ) {
+            for (const propertyName of Object.getOwnPropertyNames(prototype)) {
+                if (propertyName === "constructor") {
+                    continue;
+                }
+
+                const descriptor = Object.getOwnPropertyDescriptor(
+                    prototype,
+                    propertyName
+                );
+
+                const method = descriptor?.value as
+                    | DecoratedHandler
+                    | undefined;
+
+                if (typeof method !== "function") {
+                    continue;
+                }
+
+                const handledErrors = method[HANDLED_ERRORS];
+
+                if (!handledErrors) {
+                    continue;
+                }
+
+                const boundHandler = method.bind(this) as ErrorHandlerMethod;
+
+                for (const errorType of handledErrors) {
+                    if (handlers[errorType.name]) {
+                        throw new Error(
+                            `An error handler for "${errorType.name}" is already registered.`
+                        );
+                    }
+
+                    handlers[errorType.name] = boundHandler;
+                }
+            }
+
+            prototype = Object.getPrototypeOf(prototype);
+        }
+
+        return handlers;
+    }
+
+    async handle(error: Error): Promise<boolean> {
+        let errorType: Function | null = error.constructor;
+
+        while (errorType && errorType !== Object) {
+            const handler = this._handlerMethods[errorType.name];
+
+            if (handler) {
+                await handler(error);
+                return true;
+            }
+
+            errorType = Object.getPrototypeOf(errorType);
+        }
+
+        return false;
+    }
+}
