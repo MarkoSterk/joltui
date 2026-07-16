@@ -45,16 +45,16 @@ export type AppContainer = Element & {
 
 type AppConfig = {
     appName: string,
-    dataStructure: DataStructure|null,
-    elements: CustomElementClass[]|null,
-    routerGenerator: RouterGenerator|null,
-    authenticatorGenerator: AuthenticatorGenerator|null,
-    container: AppContainer|null,
-    errorHandlers: ErrorHandler<App>[]|null,
-    beforeInit: Record<string, CallableFunction>|null,
-    afterInit: Record<string, CallableFunction>|null,
-    extensions: Record<string, CallableFunction>|null,
-    define: Record<string, any|Record<string, CallableFunction>>|null
+    dataStructure?: DataStructure|null,
+    elements?: CustomElementClass[]|null,
+    routerGenerator?: RouterGenerator|null,
+    authenticatorGenerator?: AuthenticatorGenerator|null,
+    container?: AppContainer|null,
+    errorHandlers?: ErrorHandler<App>[]|null,
+    beforeInit?: Record<string, CallableFunction>|null,
+    afterInit?: Record<string, CallableFunction>|null,
+    extensions?: Record<string, CallableFunction>|null,
+    define?: Record<string, any|Record<string, CallableFunction>>|null
 }
 
 
