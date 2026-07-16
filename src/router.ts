@@ -224,7 +224,7 @@ class Router<TApp extends App> {
         throw new Error("Route path cannot be empty");
       }
 
-      if (!(route.handler instanceof CustomElement)) {
+      if (!isCustomElementClass(route.handler)) {
         throw new TypeError(
           `Invalid route handler for path "${route.path}"`,
         );
