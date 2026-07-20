@@ -4,11 +4,13 @@ import {
     page,
     component,
     lifecycle,
-    Lifecycle
+    Lifecycle,
+    auth
 } from "joltui";
 
-import type DevApp from "./app.js";
+import type DevApp from "../app.js";
 
+@auth(["KING"])
 @page("/second/<int:counterNumber>")
 @component({tagName: "second-page"})
 export default class SecondPage
@@ -18,6 +20,8 @@ export default class SecondPage
         <section>
             <h1>Second page</h1>
             <p>{{= this.app.router.routeParameters.counterNumber || 0 }}</p>
+
+            <counter-button></counter-button>
         </section>
     `;
 

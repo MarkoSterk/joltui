@@ -14,26 +14,52 @@ type DecoratedHandler = ErrorHandlerMethod & {
     [HANDLED_ERRORS]?: readonly ErrorConstructor[];
 };
 
+export type ErrorHandlerClass<
+    TApp extends App = App,
+> = new (app: TApp) => ErrorHandler<TApp>;
+
 export function handles(
     ...errorTypes: ErrorConstructor[]
-): MethodDecorator {
+) {
     if (errorTypes.length === 0) {
         throw new Error("@handles requires at least one Error class.");
     }
 
-    return (
-        _target: object,
-        _propertyKey: string | symbol,
-        descriptor: PropertyDescriptor
-    ): void => {
-        const method = descriptor.value as DecoratedHandler | undefined;
-
-        if (typeof method !== "function") {
-            throw new TypeError("@handles can only decorate methods.");
+    return function handlesDecorator<
+        TThis,
+        TError extends Error,
+    >(
+        method: (
+            this: TThis,
+            error: TError,
+        ) => void | Promise<void>,
+        context: ClassMethodDecoratorContext<
+            TThis,
+            (
+                this: TThis,
+                error: TError,
+            ) => void | Promise<void>
+        >,
+    ): void {
+        if (context.static) {
+            throw new TypeError(
+                "@handles cannot decorate static methods.",
+            );
         }
 
-        method[HANDLED_ERRORS] = errorTypes;
-    };
+        if (context.private) {
+            throw new TypeError(
+                "@handles cannot decorate private methods.",
+            );
+        }
+
+        const decoratedMethod =
+            method as unknown as DecoratedHandler;
+
+        decoratedMethod[HANDLED_ERRORS] = [
+            ...errorTypes,
+        ];
+    }
 }
 
 export default class ErrorHandler<TApp extends App> {
@@ -120,5 +146,9 @@ export default class ErrorHandler<TApp extends App> {
         }
 
         return false;
+    }
+
+    get app(): TApp{
+        return this._app;
     }
 }

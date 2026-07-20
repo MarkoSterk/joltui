@@ -13,6 +13,7 @@ export type ComponentConfigs = {
     tagName: string;
     dataField?: string | null;
     groupName?: string | null;
+    useServer?: boolean | null;
 };
 
 export type AuthenticationMetadata = Readonly<{
@@ -36,6 +37,7 @@ type BaseElementMetadata = Readonly<{
     tagName: string;
     dataField: string | null;
     groupName: string | null;
+    useServer: boolean | null;
 }>;
 
 export type ComponentMetadata =
@@ -131,6 +133,16 @@ function assertComponentConfigs(
         configs.groupName,
         "groupName",
     );
+
+    if (
+        configs.useServer !== undefined &&
+        configs.useServer !== null &&
+        typeof configs.useServer !== "boolean"
+    ) {
+        throw new TypeError(
+            "useServer must be a boolean, null, or undefined.",
+        );
+    }
 }
 
 function assertOptionalName(
@@ -225,6 +237,38 @@ function setElementMetadata(
     );
 }
 
+export function setPageAuthenticationMetadata<
+    TApp extends App = App,
+>(
+    elementClass: Function,
+    authentication: AuthenticationMetadata,
+): void {
+    const metadata =
+        elementMetadata.get(elementClass) as
+            | ElementMetadata<TApp>
+            | undefined;
+
+    if (!metadata || metadata.kind !== "page") {
+        throw new TypeError(
+            "@auth requires @page to be applied below it.",
+        );
+    }
+
+    setElementMetadata(
+        elementClass,
+        {
+            ...metadata,
+            authentication: {
+                authenticationRequired:
+                    authentication.authenticationRequired,
+                rolesRequired: [
+                    ...authentication.rolesRequired,
+                ],
+            },
+        },
+    );
+}
+
 function requireComponentMetadata(
     elementClass: Function,
     decoratorName: "page" | "layout",
@@ -286,6 +330,8 @@ export function component<
                     configs.dataField ?? null,
                 groupName:
                     configs.groupName ?? null,
+                useServer:
+                    configs.useServer ?? null,
             },
         );
     };

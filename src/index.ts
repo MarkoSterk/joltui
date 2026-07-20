@@ -2,7 +2,6 @@
 export {
     default as App,
     dataEventEnum,
-    ExtensionNotRegistered,
 } from "./app.js";
 
 export type {
@@ -11,7 +10,6 @@ export type {
     AppDataChangeDetail,
     AppDataChangeEvent,
     DataStructure,
-    ExtensionInitializer,
 } from "./app.js";
 
 export {
@@ -53,6 +51,10 @@ export {
     AuthorizationError,
 } from "./router.js";
 
+export {
+    auth
+} from "./auth.js";
+
 export type {
     Authentication,
     Route,
@@ -78,3 +80,14 @@ export {
     select,
     selectAll
 } from "./properties.js"
+
+export {
+    default as ErrorHandler,
+    handles
+} from "./errorHandler.js"
+
+export type {
+    ErrorConstructor,
+    ErrorHandlerClass,
+    ErrorHandlerMethod,
+} from "./errorHandler.js";

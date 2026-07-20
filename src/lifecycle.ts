@@ -1,4 +1,5 @@
 export enum Lifecycle {
+    EXTENSION_INIT = "extension-init",
     BEFORE_INIT = "before-init",
     BEFORE_INIT_RESOLVE = "before-init-resolve",
     AFTER_INIT = "after-init",

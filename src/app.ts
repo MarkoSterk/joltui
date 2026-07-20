@@ -1,5 +1,7 @@
 import Router from "./router.js";
-import ErrorHandler from "./errorHandler.js";
+import ErrorHandler, {
+    type ErrorHandlerClass,
+} from "./errorHandler.js";
 import {
     CustomElement,
     type CustomElementClass,
@@ -39,28 +41,8 @@ type DataChangeListener =
         typeof dataEventEnum.CHANGE
     >;
 
-export class ExtensionNotRegistered
-    extends Error {
-    constructor(
-        extensionName: string,
-        options?: ErrorOptions,
-    ) {
-        super(
-            `Extension '${extensionName}' is not registered.`,
-            options,
-        );
-        this.name = "ExtensionNotRegistered";
-    }
-}
-
 export type DataStructure =
     Record<string, unknown>;
-
-export type ExtensionInitializer<
-    TApp extends App<TApp> = App<any>,
-> = (
-    app: TApp,
-) => unknown | Promise<unknown>;
 
 export type AppContainer<
     TApp extends App<TApp> = App<any>,
@@ -72,12 +54,9 @@ export type AppConfig<
     TApp extends App<TApp> = App<any>,
 > = {
     appName: string;
+    serverComponentsUrl?: string | null;
     dataStructure?: DataStructure | null;
     container?: AppContainer<TApp> | null;
-    extensions?: Record<
-        string,
-        ExtensionInitializer<TApp>
-    > | null;
 };
 
 type ElementHtmlSetter = (
@@ -91,11 +70,15 @@ class App<
     readonly elements:
         readonly CustomElementClass<TApp>[] = [];
 
-    protected readonly errorHandlers:
+    readonly errorHandlers:
+        readonly ErrorHandlerClass<TApp>[] = [];
+
+    protected _errorHandlerInstances:
         readonly ErrorHandler<TApp>[] = [];
 
     protected readonly _identifier = "app";
     protected readonly _appName: string;
+    protected _serverComponentsUrl: string | null = null;
 
     protected _container:
         AppContainer<TApp> | null;
@@ -105,15 +88,6 @@ class App<
 
     protected _router:
         Router<TApp> | null = null;
-
-    protected readonly _extensions:
-        Record<
-            string,
-            ExtensionInitializer<TApp>
-        >;
-
-    protected readonly _extensionsMap:
-        Record<string, unknown> = {};
 
     protected readonly _dataChangeListeners:
         Map<string, DataChangeListener> =
@@ -151,9 +125,9 @@ class App<
 
     constructor({
         appName,
+        serverComponentsUrl = null,
         dataStructure = null,
         container = null,
-        extensions = null,
     }: AppConfig<TApp>) {
         if (
             typeof appName !== "string" ||
@@ -165,15 +139,18 @@ class App<
         }
 
         this._appName = appName;
+
+        if (serverComponentsUrl !== null) {
+            this.serverComponentsUrl =
+                serverComponentsUrl;
+        }
+
         this._container =
             container as AppContainer<TApp> | null;
 
         this._dataStructure = new Map(
             Object.entries(dataStructure ?? {}),
         );
-
-        this._extensions =
-            extensions ?? {};
 
         this._originalInnerHTML =
             this.getRequiredSetter(
@@ -233,14 +210,18 @@ class App<
 
         this._modifyPrototypeMethods();
 
+        this._errorHandlerInstances = this._initializeErrorHandlers();
+
+        await this._runLifecycleStage(
+            Lifecycle.EXTENSION_INIT,
+        );
+
         await this._runLifecycleStage(
             Lifecycle.BEFORE_INIT,
         );
 
         this._router =
             this.routerGenerator();
-
-        await this._initializeExtensions();
 
         if (this._router) {
             await this._router.route();
@@ -475,17 +456,27 @@ class App<
         );
     }
 
-    protected async _initializeExtensions():
-        Promise<void> {
-        for (
-            const [name, initializer]
-            of Object.entries(
-                this._extensions,
-            )
-        ) {
-            this._extensionsMap[name] =
-                await initializer(this.application);
+    protected _initializeErrorHandlers(): ErrorHandler<TApp>[] {
+        const handlerInstances = [];
+        for(const ErrorHandlerClass of this.errorHandlers){
+            if (
+                typeof ErrorHandlerClass !==
+                    "function" ||
+                !(
+                    ErrorHandlerClass.prototype
+                    instanceof ErrorHandler
+                )
+            ) {
+                throw new TypeError(
+                    "Application error handlers must extend ErrorHandler.",
+                );
+            }
+
+            handlerInstances.push(new ErrorHandlerClass(
+                this.application,
+            ));
         }
+        return handlerInstances;
     }
 
     protected async _runLifecycleStage(
@@ -565,12 +556,11 @@ class App<
         error: unknown,
     ): Promise<void> => {
         if (!(error instanceof Error)) {
-            throw error;
+            throw new Error("Failed to handle error. Provided instance is not an instance of Error.");
         }
-
         for (
             const errorHandler
-            of this.errorHandlers
+            of this._errorHandlerInstances
         ) {
             if (
                 await errorHandler.handle(
@@ -665,38 +655,48 @@ class App<
 
     protected _modifyPrototypeMethods = () => {
         const appInstance = this;
-        
-        HTMLElement.prototype.setAttribute = function(name, value: string) {
-            if(this instanceof CustomElement){
-                try{
-                    if (value !== undefined && value !== null){
-                        value = JSON.parse(value) as string;
-                    }
-                }catch(e){
-                    //silent pass
-                }
-                if(name.startsWith(":")){
-                    name = `${name.substring(1)}`.trim()
-                }
-                appInstance._originalSetAttribute.call(this, `data-jolt-${name}`, value);
-            }else{
-                appInstance._originalSetAttribute.call(this, name, value);
-            }
-        }
 
-        HTMLElement.prototype.removeAttribute = function(name){
-            if(name.startsWith(":")){
-                name = "data-df-" + name.substring(1);
+        const normalizeAttributeName = (
+            name: string,
+        ): string => {
+            if (!name.startsWith(":")) {
+                return name;
             }
-            appInstance._originalRemoveAttribute.call(this, name);
-        }
 
-        HTMLElement.prototype.getAttribute = function(name) {
-            if(name.startsWith(":")){
-                name = `data-df-${name.substring(1)}`.trim();
-            }
-            return appInstance._originalGetAttribute.call(this, name);
-        }
+            return (
+                `data-jolt-` +
+                name.substring(1).trim()
+            );
+        };
+
+        HTMLElement.prototype.setAttribute = function(
+            name: string,
+            value: string,
+        ): void {
+            appInstance._originalSetAttribute.call(
+                this,
+                normalizeAttributeName(name),
+                value,
+            );
+        };
+
+        HTMLElement.prototype.removeAttribute = function(
+            name: string,
+        ): void {
+            appInstance._originalRemoveAttribute.call(
+                this,
+                normalizeAttributeName(name),
+            );
+        };
+
+        HTMLElement.prototype.getAttribute = function(
+            name: string,
+        ): string | null {
+            return appInstance._originalGetAttribute.call(
+                this,
+                normalizeAttributeName(name),
+            );
+        };
 
         Element.prototype.insertAdjacentHTML = function(position, html){
             const customElement = this.closest("[data-hash-id]") as CustomElement<TApp> | null;
@@ -860,8 +860,8 @@ class App<
 
     get router(): Router<TApp> {
         if (!this._router) {
-            throw new ExtensionNotRegistered(
-                "router",
+            throw new Error(
+                "Router is not initialized.",
             );
         }
 
@@ -870,6 +870,20 @@ class App<
 
     get appName(): string {
         return this._appName;
+    }
+
+    get serverComponentsUrl(): string | null {
+        return this._serverComponentsUrl;
+    }
+
+    set serverComponentsUrl(value: string) {
+        if (typeof value !== "string") {
+            throw new TypeError(
+                "Server components URL must be a string.",
+            );
+        }
+
+        this._serverComponentsUrl = value;
     }
 
     get identifier(): string {
@@ -967,20 +981,6 @@ class App<
         }
 
         return searchParams.toString();
-    }
-
-    getExtension<T = unknown>(
-        name: string,
-    ): T {
-        if (
-            !(name in this._extensionsMap)
-        ) {
-            throw new ExtensionNotRegistered(
-                name,
-            );
-        }
-
-        return this._extensionsMap[name] as T;
     }
 
     get hash(): string {

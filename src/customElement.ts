@@ -455,7 +455,6 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             event as CustomEvent<{
                 field: string;
             }>;
-
         this._refreshBoundElements(
             `app.${customEvent.detail.field}`,
         );
@@ -473,7 +472,6 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         propertyName: string,
     ): void {
         this._renderTime = Date.now();
-
         const templates =
             this._templateSettings.dataBinds.get(
                 propertyName,
@@ -900,6 +898,10 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
     get groupName(): string | null {
         return this.metadata.groupName;
+    }
+
+    get useServer(): boolean | null {
+        return this.metadata.useServer;
     }
 
     get parent(): CustomElement | null {

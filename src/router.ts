@@ -251,7 +251,6 @@ class Router<TApp extends App> {
         this._baseUrl = this._normalizeBaseUrl(baseUrl);
         this._routes = this._discoverRoutes();
         this._routesMap = this._parseRoutes(this._routes);
-        console.log("ROUTES MAP: ", this._routesMap)
 
         this.app.addEventListener(
             "click",
@@ -522,7 +521,7 @@ class Router<TApp extends App> {
         this._inTransition = true;
 
         try {
-            await this._handleLinkPress(anchor.href);
+            await this.redirect(anchor.href);
         } catch (error: unknown) {
             await this._app.handleError(
                 new RouteFailedError({
@@ -834,6 +833,19 @@ class Router<TApp extends App> {
         throw new RouteNotFoundError(
             normalizedPath,
         );
+    }
+
+    async redirect(path: string): Promise<void> {
+        if (
+            typeof path !== "string" ||
+            path.trim().length === 0
+        ) {
+            throw new TypeError(
+                "Redirect path must be a non-empty string.",
+            );
+        }
+
+        await this._handleLinkPress(path);
     }
 
     protected _handleLinkPress = async (
