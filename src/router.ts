@@ -1,6 +1,6 @@
 import App from "./app.js";
 import { CustomElement, type CustomElementClass } from "./customElement.js";
-import { AuthenticationError, AuthorizationError } from "./authenticator.js";
+import { NotImplementedError } from "./utilities.js";
 
 export const routeEventsEnum = {
     START: "route-change.start",
@@ -42,6 +42,25 @@ export class UnsupportedRouteParameterType extends Error{
     this.type = type;
     this.name = "UnsupportedRouteParameterType";
   }
+}
+
+export class AuthenticationError extends Error{
+    protected readonly path: string;
+    constructor(path: string, options?: ErrorOptions){
+        super("User not authenticated");
+        this.path = path;
+        this.name = "AuthenticationError";
+    }
+}
+export class AuthorizationError extends Error{
+    protected readonly path: string;
+    protected readonly roles: any[];
+    constructor(path: string, roles: any[], options?: ErrorOptions){
+        super();
+        this.path = path;
+        this.roles = roles;
+        this.name = "AuthorizationError";
+    }
 }
 
 export type RouteParameters = Record<
@@ -192,6 +211,14 @@ class Router<TApp extends App> {
     this._routeParameters = {};
   }
 
+  isAuthenticated = async () => {
+      throw new NotImplementedError("Authenticator.isAuthorized");
+  }
+
+  checkUserRoles = async (roles: any[]) => {
+      throw new NotImplementedError("Authenticator.checkUserRoles");
+  }
+
   protected _handleRoutes(
     routes: RouteGenerator | Route[],
   ): Route[] {
@@ -220,11 +247,13 @@ class Router<TApp extends App> {
     this._registerCustomElement(layout);
 
     for (const route of routes) {
+      console.log("Parsing routes")
       if (!route.path) {
         throw new Error("Route path cannot be empty");
       }
 
       if (!isCustomElementClass(route.handler)) {
+        console.log(route)
         throw new TypeError(
           `Invalid route handler for path "${route.path}"`,
         );
@@ -450,11 +479,11 @@ class Router<TApp extends App> {
       const matchedPath: MatchedRoute = this._matchRoute(path);
 
       if(matchedPath?.authentication?.authenticationRequired){
-        if(!this.app.authenticator.isAuthenticated()){
+        if(!this.isAuthenticated()){
           throw new AuthenticationError(matchedPath.path);
         }
         if(matchedPath?.authentication?.rolesRequired){
-          if(!this.app.authenticator.checkUserRoles(matchedPath.authentication?.rolesRequired)){
+          if(!this.checkUserRoles(matchedPath.authentication?.rolesRequired)){
             throw new AuthorizationError(matchedPath.path, matchedPath.authentication?.rolesRequired)
           }
         }
