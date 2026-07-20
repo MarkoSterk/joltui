@@ -1,62 +1,101 @@
 import App from "./app.js";
-import { CustomElement, type CustomElementClass } from "./customElement.js";
+import {
+    CustomElement,
+    type CustomElementClass,
+} from "./customElement.js";
+import {
+    getElementMetadata,
+    requireElementMetadata,
+    type PageMetadata,
+} from "./elementMetadata.js";
 import { NotImplementedError } from "./utilities.js";
 
 export const routeEventsEnum = {
     START: "route-change.start",
     FINISHED: "route-change.finished",
-    LAYOUT_CHANGE_FINISHED: "route-change.layout-change.finished",
-    ERROR_PAGE_START: "route-change.error-page.start",
-    ERROR_PAGE_FINISHED: "route-change.error-page.finished",
+    LAYOUT_CHANGE_FINISHED:
+        "route-change.layout-change.finished",
+    ERROR_PAGE_START:
+        "route-change.error-page.start",
+    ERROR_PAGE_FINISHED:
+        "route-change.error-page.finished",
 } as const;
 
-export class RouteFailedError extends Error{
-  constructor(options?: ErrorOptions){
-    super("Routing failed", options);
-    this.name = "RouteFailedError";
-  }
+export class RouteFailedError extends Error {
+    constructor(options?: ErrorOptions) {
+        super("Routing failed", options);
+        this.name = "RouteFailedError";
+    }
 }
 
-export class RouteNotFoundError extends Error{
-  protected readonly route: string;
-  constructor(route: string, options?: ErrorOptions){
-    super(`Route '{path}' not found`, options);
-    this.route = route;
-    this.name = "RouteNotFoundError";
-  }
+export class RouteNotFoundError extends Error {
+    protected readonly route: string;
+
+    constructor(
+        route: string,
+        options?: ErrorOptions,
+    ) {
+        super(`Route '${route}' not found`, options);
+        this.route = route;
+        this.name = "RouteNotFoundError";
+    }
 }
 
-export class RouteParametersError extends Error{
-  protected readonly path: string;
-  constructor(path: string, options?: ErrorOptions){
-    super("Failed to parse route parameters for path " + path, options);
-    this.path = path;
-    this.name = "RoutePrametersError";
-  }
-}
-
-export class UnsupportedRouteParameterType extends Error{
-  protected readonly type: string;
-  constructor(type: string, options?: ErrorOptions){
-    super(`Route parameter of type '${type}' is not supported`, options);
-    this.type = type;
-    this.name = "UnsupportedRouteParameterType";
-  }
-}
-
-export class AuthenticationError extends Error{
+export class RouteParametersError extends Error {
     protected readonly path: string;
-    constructor(path: string, options?: ErrorOptions){
-        super("User not authenticated");
+
+    constructor(
+        path: string,
+        options?: ErrorOptions,
+    ) {
+        super(
+            `Failed to parse route parameters for path '${path}'`,
+            options,
+        );
+        this.path = path;
+        this.name = "RouteParametersError";
+    }
+}
+
+export class UnsupportedRouteParameterType extends Error {
+    protected readonly type: string;
+
+    constructor(
+        type: string,
+        options?: ErrorOptions,
+    ) {
+        super(
+            `Route parameter type '${type}' is not supported`,
+            options,
+        );
+        this.type = type;
+        this.name = "UnsupportedRouteParameterType";
+    }
+}
+
+export class AuthenticationError extends Error {
+    protected readonly path: string;
+
+    constructor(
+        path: string,
+        options?: ErrorOptions,
+    ) {
+        super("User not authenticated", options);
         this.path = path;
         this.name = "AuthenticationError";
     }
 }
-export class AuthorizationError extends Error{
+
+export class AuthorizationError extends Error {
     protected readonly path: string;
-    protected readonly roles: any[];
-    constructor(path: string, roles: any[], options?: ErrorOptions){
-        super();
+    protected readonly roles: unknown[];
+
+    constructor(
+        path: string,
+        roles: unknown[],
+        options?: ErrorOptions,
+    ) {
+        super("User is not authorized for this route", options);
         this.path = path;
         this.roles = roles;
         this.name = "AuthorizationError";
@@ -68,88 +107,84 @@ export type RouteParameters = Record<
     string | number
 >;
 
-
-type RouteParameterType = "str" | "int";
-
-type Authentication = {
-  authenticationRequired: boolean;
-  rolesRequired: unknown[];
+export type Authentication = {
+    authenticationRequired: boolean;
+    rolesRequired: unknown[];
 };
 
+export type RouteHandlers<
+    TApp extends App = App,
+> = Record<string, CustomElementClass<TApp>>;
 
-type RouteHandlers = Record<string, CustomElementClass>;
+export type HandlerArgs = Record<string, unknown>;
 
-type ScrollPosition = {
-  x: Number,
-  y: Number
-}
-
-type CurrentState = {
-  scrollPosition: ScrollPosition
-}
-
-type HandlerArgs = Record<string, unknown>;
-
-type RouteHandlerArgs = Record<
+export type RouteHandlerArgs = Record<
     string,
     HandlerArgs
 >;
 
-type Route = {
+export type RouteExtras = Record<string, unknown>;
+
+export type Route<
+    TApp extends App = App,
+> = {
     path: string;
-    handler: CustomElementClass;
-    target: string | null;
-    details: Record<string, unknown> | null;
-    authentication: Authentication | null;
-    handlers?: RouteHandlers;
-    layout?: CustomElementClass;
-    title?: string | null;
-    args?: HandlerArgs;
-    children?: Route[];
-    roles?: any[] | null;
-};
-
-
-export type MatchedRoute = ParsedRoute & {
-    path: string;
-    pattern: string;
-    parameters: RouteParameters;
-    handlers: RouteHandlers,
-    authentication: Authentication|null, 
-};
-
-type ParsedRoute = {
-    handlers: RouteHandlers;
-    layout: CustomElementClass;
+    handler: CustomElementClass<TApp>;
+    target: string;
+    layout: CustomElementClass<TApp>;
     title: string | null;
-    details: Record<string, unknown> | null;
+    extras: RouteExtras;
+    authentication: Authentication | null;
+    roles: unknown[] | null;
+};
+
+export type ParsedRoute<
+    TApp extends App = App,
+> = {
+    handlers: RouteHandlers<TApp>;
+    layout: CustomElementClass<TApp>;
+    title: string | null;
+    extras: RouteExtras;
     authentication: Authentication | null;
     args: RouteHandlerArgs | null;
-    roles: any[] | null;
+    roles: unknown[] | null;
     route: string;
 };
 
-type RouteGenerator = () => Route[];
-
-type RouterConfig<TApp extends App> = {
-  baseUrl?: string;
-  routes: RouteGenerator | Route[];
-  baseLayout: CustomElementClass;
-  defaultTarget: string;
-  indexRoute?: string;
-  app: TApp;
+export type MatchedRoute<
+    TApp extends App = App,
+> = ParsedRoute<TApp> & {
+    path: string;
+    pattern: string;
+    parameters: RouteParameters;
 };
 
-type ParseRoutesConfig = {
-  routes: Route[];
-  parentPath?: string;
-  parentHandlers?: RouteHandlers;
-  layout?: CustomElementClass;
+export type RouterConfig<
+    TApp extends App,
+> = {
+    baseUrl?: string;
+    baseLayout: CustomElementClass<TApp>;
+    defaultTarget: string;
+    indexRoute?: string;
+    app: TApp;
 };
 
-function isCustomElementClass(
+type RouteParameterType = "str" | "int";
+
+type ScrollPosition = {
+    x: number;
+    y: number;
+};
+
+type CurrentState = {
+    scrollPosition: ScrollPosition;
+};
+
+function isCustomElementClass<
+    TApp extends App = App,
+>(
     value: unknown,
-): value is CustomElementClass {
+): value is CustomElementClass<TApp> {
     return (
         typeof value === "function" &&
         value.prototype instanceof CustomElement
@@ -157,591 +192,766 @@ function isCustomElementClass(
 }
 
 class Router<TApp extends App> {
-  protected readonly _app: TApp;
-  protected readonly _baseLayout: CustomElementClass;
-  protected readonly _defaultTarget: string;
-  protected readonly _indexRoute: string;
-  protected readonly _baseUrl: string;
-  protected readonly _routes: Route[];
-  protected readonly _routesMap: Map<string, ParsedRoute>;
-  protected _currentRoute: ParsedRoute|null;
-  protected _routeParameters: RouteParameters
-  protected _inTransition: boolean
+    protected readonly _app: TApp;
+    protected readonly _baseLayout: CustomElementClass<TApp>;
+    protected readonly _defaultTarget: string;
+    protected readonly _indexRoute: string;
+    protected readonly _baseUrl: string;
+    protected readonly _routes: Route<TApp>[];
+    protected readonly _routesMap: Map<
+        string,
+        ParsedRoute<TApp>
+    >;
 
-  constructor({
-    baseUrl = "",
-    routes,
-    baseLayout,
-    defaultTarget,
-    indexRoute = "/",
-    app,
-  }: RouterConfig<TApp>) {
-    if (!app) {
-      throw new Error(
-        "Missing application object in router constructor",
-      );
-    }
+    protected _currentRoute: ParsedRoute<TApp> | null = null;
+    protected _routeParameters: RouteParameters = {};
+    protected _inTransition = false;
 
-    if (!routes) {
-      throw new Error("Missing routes object for router");
-    }
-
-    if (
-      !baseLayout ||
-      !isCustomElementClass(baseLayout)
-    ) {
-      throw new Error(
-        "Missing base layout element for the application",
-      );
-    }
-
-    this._app = app;
-    this._inTransition = false;
-    this._baseLayout = baseLayout;
-    this._defaultTarget = defaultTarget;
-    this._indexRoute = indexRoute;
-    this._baseUrl = baseUrl;
-    this._routes = this._handleRoutes(routes);
-    this._routesMap = this._parseRoutes({
-      routes: this._routes,
-    });
-    this.app.addEventListener("click", this._clickHandler);
-    window.addEventListener("popstate", this._popStateHandler);
-    this._currentRoute = null;
-    this._routeParameters = {};
-  }
-
-  isAuthenticated = async () => {
-      throw new NotImplementedError("Authenticator.isAuthorized");
-  }
-
-  checkUserRoles = async (roles: any[]) => {
-      throw new NotImplementedError("Authenticator.checkUserRoles");
-  }
-
-  protected _handleRoutes(
-    routes: RouteGenerator | Route[],
-  ): Route[] {
-    const parsedRoutes =
-      typeof routes === "function"
-        ? routes.call(this)
-        : routes;
-
-    if (!Array.isArray(parsedRoutes)) {
-      throw new TypeError(
-        "Route generator must return an array of routes",
-      );
-    }
-
-    return parsedRoutes;
-  }
-
-  protected _parseRoutes({
-    routes,
-    parentPath = "",
-    parentHandlers = {},
-    layout = this._baseLayout,
-  }: ParseRoutesConfig): Map<string, ParsedRoute> {
-    const routeMap = new Map<string, ParsedRoute>();
-
-    this._registerCustomElement(layout);
-
-    for (const route of routes) {
-      console.log("Parsing routes")
-      if (!route.path) {
-        throw new Error("Route path cannot be empty");
-      }
-
-      if (!isCustomElementClass(route.handler)) {
-        console.log(route)
-        throw new TypeError(
-          `Invalid route handler for path "${route.path}"`,
-        );
-      }
-
-      const fullPath = this._joinPaths(
-        parentPath,
-        route.path,
-      );
-
-      const routeLayout = route.layout ?? layout;
-      const target =
-        route.target ?? this._defaultTarget;
-
-      this._registerCustomElement(routeLayout);
-      this._registerCustomElement(route.handler);
-
-      const handlers: RouteHandlers = {
-        ...parentHandlers,
-        [target]: route.handler,
-      };
-
-      if (route.handlers) {
-        for (const [handlerTarget, handler] of Object.entries(
-          route.handlers,
-        )) {
-          if (!(handler instanceof CustomElement)) {
-            throw new TypeError(
-              `Invalid handler for target "${handlerTarget}" on route "${fullPath}"`,
-            );
-          }
-
-          this._registerCustomElement(handler);
-          handlers[handlerTarget] = handler;
-        }
-      }
-
-      const args =
-        route.args !== undefined
-          ? {
-              [route.handler.tagName]: route.args,
-            }
-          : null;
-
-      routeMap.set(fullPath, {
-        handlers,
-        layout: routeLayout,
-        title: route.title ?? null,
-        details: route.details ?? null,
-        authentication:
-          route.authentication ?? null,
-        args,
-        roles: route.roles ?? null,
-        route: fullPath
-      });
-
-      if (route.children?.length) {
-        const childRoutes = this._parseRoutes({
-          routes: route.children,
-          parentPath: fullPath,
-          parentHandlers: handlers,
-          layout: routeLayout,
-        });
-
-        for (const [path, config] of childRoutes) {
-          if (routeMap.has(path)) {
+    constructor({
+        baseUrl = "",
+        baseLayout,
+        defaultTarget,
+        indexRoute = "/",
+        app,
+    }: RouterConfig<TApp>) {
+        if (!app) {
             throw new Error(
-              `Duplicate route path "${path}"`,
+                "Missing application object in router constructor",
             );
-          }
-
-          routeMap.set(path, config);
         }
-      }
-    }
 
-    return this._sortRoutes(routeMap);
-  }
-
-  protected _registerCustomElement(
-    element: CustomElementClass,
-  ): void {
-    if (!customElements.get(element.tagName)) {
-      this._app.registerCustomElements([element]);
-    }
-  }
-
-  protected _joinPaths(
-    parentPath: string,
-    routePath: string,
-  ): string {
-    if (!parentPath) {
-      return this._normalizePath(routePath);
-    }
-
-    if (routePath === "/") {
-      return this._normalizePath(parentPath);
-    }
-
-    return this._normalizePath(
-      `${parentPath}/${routePath}`,
-    );
-  }
-
-  protected _normalizePath(path: string): string {
-    const normalizedPath = path
-      .trim()
-      .replace(/\/+/g, "/");
-
-    if (
-      normalizedPath === "" ||
-      normalizedPath === "/"
-    ) {
-      return "/";
-    }
-
-    const pathWithLeadingSlash =
-      normalizedPath.startsWith("/")
-        ? normalizedPath
-        : `/${normalizedPath}`;
-
-    return pathWithLeadingSlash.replace(/\/+$/, "");
-  }
-
-  protected _sortRoutes(
-    routeMap: Map<string, ParsedRoute>,
-  ): Map<string, ParsedRoute> {
-    const sortedRoutes = Array.from(
-      routeMap.entries(),
-    ).sort(([firstPath], [secondPath]) => {
-      const lengthDifference =
-        secondPath.length - firstPath.length;
-
-      if (lengthDifference !== 0) {
-        return lengthDifference;
-      }
-
-      if (
-        firstPath.includes("<str:") &&
-        secondPath.includes("<int:")
-      ) {
-        return -1;
-      }
-
-      if (
-        firstPath.includes("<int:") &&
-        secondPath.includes("<str:")
-      ) {
-        return 1;
-      }
-
-      return 0;
-    });
-
-    return new Map(sortedRoutes);
-  }
-
-  protected _popStateHandler = async (event: PopStateEvent) => {
-    await this.route();
-    if (event.state && event.state.scrollPosition) {
-        const { x, y } = event.state.scrollPosition;
-        window.scrollTo(x, y);
-    }
-  }
-
-  protected _clickHandler = async (event: MouseEvent): Promise<void> => {
-    if (event.defaultPrevented || event.button !== 0) {
-        return;
-    }
-
-    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
-        return;
-    }
-
-    const target = event.target;
-
-    if (!(target instanceof Element)) {
-        return;
-    }
-
-    const anchor = target.closest<HTMLAnchorElement>("a");
-
-    if (!anchor) {
-        return;
-    }
-
-    if (
-      anchor.hasAttribute("router-ignore") ||
-      anchor.hasAttribute("download") ||
-      anchor.target === "_blank" ||
-      !anchor.href ||
-      anchor.protocol === "mailto:" ||
-      anchor.protocol === "tel:"
-  ) {
-      return;
-  }
-
-    event.preventDefault();
-
-    if (this._inTransition) {
-        return;
-    }
-
-    this._inTransition = true;
-
-    try {
-        await this._handleLinkPress(anchor.href);
-    } catch (error: unknown) {
-        const e = new RouteFailedError()
-        await this._app.handleError(e)
-    } finally {
-        this._inTransition = false;
-    }
-  };
-
-  route = async () => {
-    try{
-      let path = location.pathname;
-      path = path.replace(this.baseUrl, "");
-      if(path === ""){
-          path = "/";
-      }
-      const matchedPath: MatchedRoute = this._matchRoute(path);
-
-      if(matchedPath?.authentication?.authenticationRequired){
-        if(!this.isAuthenticated()){
-          throw new AuthenticationError(matchedPath.path);
+        if (!isCustomElementClass<TApp>(baseLayout)) {
+            throw new TypeError(
+                "Invalid base layout element class",
+            );
         }
-        if(matchedPath?.authentication?.rolesRequired){
-          if(!this.checkUserRoles(matchedPath.authentication?.rolesRequired)){
-            throw new AuthorizationError(matchedPath.path, matchedPath.authentication?.rolesRequired)
-          }
-        }
-      }
-      await this._loadPath(matchedPath);
-    }catch(e){
-      return await this.app.handleError(e);
-    }
-  }
 
-  protected _loadPath = async (matchedPath: MatchedRoute) => {
-    this._emitRouteEvent(routeEventsEnum.START);
-    const renderSequence = [];
-    await this._renderLayout(matchedPath.layout);
-    const layout: CustomElement = this.app.querySelector(matchedPath.layout.tagName) as CustomElement;
-    await layout.initComplete;
-    const handlersArray = Object.entries(matchedPath.handlers);
-    for(const [index, [target, handler]] of handlersArray.entries()){
-        const targetContainer = this.app.querySelector(target);
-        if(!targetContainer){
-            throw new Error(`Failed to get target (${target}) container for handler (${handler})`);
+        const layoutMetadata =
+            requireElementMetadata(baseLayout);
+
+        if (layoutMetadata.kind !== "layout") {
+            throw new TypeError(
+                `Base layout '${baseLayout.name}' must use @layout.`,
+            );
         }
-        const existingElement = targetContainer.querySelector(handler.tagName);
-        if(existingElement && (handlersArray.length != 1 || index < handlersArray.length - 1)){
-            continue;
+
+        if (
+            typeof defaultTarget !== "string" ||
+            defaultTarget.trim().length === 0
+        ) {
+            throw new TypeError(
+                "Router defaultTarget must be a non-empty selector.",
+            );
         }
-        const hashId = this.app.generateHash()
-        this.app.originalInnerHTML.call(targetContainer, handler.generate(hashId, matchedPath.args?.[handler.tagName]))
-        const generatedHandler = this.app.querySelector(`[data-hash-id="${hashId}"]`) as CustomElement;
-        if(generatedHandler){
-            await generatedHandler.initComplete;
-        }
-        renderSequence.push([target, hashId, handler])
+
+        this._app = app;
+        this._baseLayout = baseLayout;
+        this._defaultTarget = defaultTarget;
+        this._indexRoute = this._normalizePath(indexRoute);
+        this._baseUrl = this._normalizeBaseUrl(baseUrl);
+        this._routes = this._discoverRoutes();
+        this._routesMap = this._parseRoutes(this._routes);
+        console.log("ROUTES MAP: ", this._routesMap)
+
+        this.app.addEventListener(
+            "click",
+            this._clickHandler,
+        );
+
+        window.addEventListener(
+            "popstate",
+            this._popStateHandler,
+        );
     }
-    this._setTitle(matchedPath.title);
-    this.currentRoute = {
-        ...matchedPath,
+
+    isAuthenticated = async (): Promise<boolean> => {
+        throw new NotImplementedError(
+            "Router.isAuthenticated",
+        );
     };
-    this._emitRouteEvent(routeEventsEnum.FINISHED);
-  }
 
-  protected _renderLayout = async (layout: CustomElementClass) => {
-    if(!this.app.querySelector(layout.tagName)){
-        this.app.container.innerHTML = layout.generate();
-        const layoutElement = this.app.querySelector(layout.tagName) as CustomElement;
-        await layoutElement.initComplete;
-        this._emitRouteEvent(routeEventsEnum.LAYOUT_CHANGE_FINISHED);
-    }
-  }
+    checkUserRoles = async (
+        _roles: unknown[],
+    ): Promise<boolean> => {
+        throw new NotImplementedError(
+            "Router.checkUserRoles",
+        );
+    };
 
-  protected _setTitle = (title: string|null) => {
-    let titleElement = document.head.querySelector("title");
-    if(!titleElement){
-        titleElement = document.createElement("title");
-        document.head.insertAdjacentElement("afterbegin", titleElement);
-    }
-    if(title == null){
-      titleElement.innerText = this.app.appName;
-      return;
-    }
-    titleElement.innerText = title;
-  }
-  
-  protected _emitRouteEvent = (eventType: string) => {
-    const customEvent = new CustomEvent(routeEventsEnum.FINISHED, {
-        bubbles: true,
-        cancelable: true,
-    })
-    this.app.container.dispatchEvent(customEvent);
-  }
+    protected _discoverRoutes(): Route<TApp>[] {
+        const routes: Route<TApp>[] = [];
 
-  protected _matchRoute(
-        path: string,
-    ): MatchedRoute {
-      const normalizedPath = this._normalizePath(path);
+        for (const elementClass of this.app.elements) {
+            if (!isCustomElementClass<TApp>(elementClass)) {
+                throw new TypeError(
+                    "Application elements must contain CustomElement classes.",
+                );
+            }
 
-      for (const [routePattern,config] of this._routesMap) {
-        const parameterNames: string[] =
-            [];
+            const metadata =
+                getElementMetadata<TApp>(elementClass);
 
-        const parameterTypes: RouteParameterType[] =
-            [];
+            if (!metadata || metadata.kind !== "page") {
+                continue;
+            }
 
-        const escapedPattern =
-            routePattern.replace(
-                /[.*+?^${}()|[\]\\]/g,
-                "\\$&",
-            );
-
-        const regexPath =
-            escapedPattern.replace(
-                /<(str|int):([A-Za-z_]\w*)>/g,
-                (
-                    _placeholder: string,
-                    type: RouteParameterType,
-                    parameterName: string,
-                ): string => {
-                    parameterNames.push(
-                        parameterName,
-                    );
-                    parameterTypes.push(type);
-                    switch (type) {
-                        case "str": return "([^/]+)";
-                        case "int": return "(\\d+)";
-                        default: {
-                            const unsupportedType: never =
-                                type;
-
-                            throw new UnsupportedRouteParameterType(unsupportedType);
-                        }
-                    }
-                },
-            );
-        const match =
-            normalizedPath.match(
-                new RegExp(
-                    `^${regexPath}$`,
+            routes.push(
+                this._createRouteFromMetadata(
+                    elementClass,
+                    metadata,
                 ),
             );
-        if (!match) {
-            continue;
-        }
-        const parameters: RouteParameters = {};
-        for (let index = 0; index < parameterNames.length;index++) {
-          const parameterName = parameterNames[index];
-          const parameterType = parameterTypes[index];
-          const capturedValue = match[index + 1];
-          if (parameterName ===undefined ||
-              parameterType ===undefined ||
-              capturedValue === undefined
-          ) {
-              throw new RouteParametersError(routePattern);
-          }
-          parameters[parameterName] =
-              parameterType === "int"
-                  ? Number.parseInt(
-                        capturedValue,
-                        10,
-                    )
-                  : decodeURIComponent(
-                        capturedValue,
-                    );
         }
 
-        this._routeParameters = parameters;
+        if (routes.length === 0) {
+            throw new Error(
+                "The application does not contain any @page components.",
+            );
+        }
+
+        return routes;
+    }
+
+    protected _createRouteFromMetadata(
+        handler: CustomElementClass<TApp>,
+        metadata: PageMetadata<TApp>,
+    ): Route<TApp> {
+        const layout =
+            metadata.layout ??
+            this._baseLayout;
+
+        if (!isCustomElementClass<TApp>(layout)) {
+            throw new TypeError(
+                `Invalid layout configured for page '${handler.name}'.`,
+            );
+        }
+
+        const layoutMetadata =
+            requireElementMetadata(layout);
+
+        if (layoutMetadata.kind !== "layout") {
+            throw new TypeError(
+                `Page layout '${layout.name}' must use @layout.`,
+            );
+        }
+
+        if (!this.app.elements.includes(layout)) {
+            throw new Error(
+                `Page layout '${layout.name}' is not registered ` +
+                `in app.elements.`,
+            );
+        }
+
         return {
-            ...config,
-            path: normalizedPath,
-            pattern: routePattern,
-            parameters,
+            path: this._normalizePath(metadata.path),
+            handler,
+            target:
+                metadata.target ??
+                this._defaultTarget,
+            layout,
+            title: metadata.title,
+            extras: metadata.extras,
+            authentication:
+                metadata.authentication,
+            roles: metadata.roles,
         };
     }
-    this._routeParameters = {};
-    throw new RouteNotFoundError(
-        normalizedPath,
-    );
-  }
 
+    protected _parseRoutes(
+        routes: readonly Route<TApp>[],
+    ): Map<string, ParsedRoute<TApp>> {
+        const routeMap = new Map<
+            string,
+            ParsedRoute<TApp>
+        >();
 
-  protected _handleLinkPress = async (href: string) => {
-      const state = this._getCurrentState();
-      try{
-        await this.route();
-        history.pushState(state, "", href);
-      }catch(e: unknown){
-        await this.app.handleError(e);
-      }
-  }
+        for (const route of routes) {
+            if (routeMap.has(route.path)) {
+                throw new Error(
+                    `Duplicate route path '${route.path}'.`,
+                );
+            }
 
-  protected _getCurrentState = ():CurrentState => {
-    const state = {
-        scrollPosition: {
-            x: window.scrollX,
-            y: window.scrollY
+            routeMap.set(
+                route.path,
+                {
+                    handlers: {
+                        [route.target]:
+                            route.handler,
+                    },
+                    layout: route.layout,
+                    title: route.title,
+                    extras: route.extras,
+                    authentication:
+                        route.authentication,
+                    args: null,
+                    roles: route.roles,
+                    route: route.path,
+                },
+            );
         }
+
+        return this._sortRoutes(routeMap);
     }
 
-    return state;
-  }
+    protected _normalizePath(path: string): string {
+        const normalizedPath = path
+            .trim()
+            .replace(/\/+/g, "/");
 
-  urlIsCurrentPath = (href: string): boolean => {
-      let modifiedHref: string|any = href.replace(this.origin, "");
-      modifiedHref = href.replace(this._baseUrl, "");
-      modifiedHref = href.split("?", 2).length > 0 ? href.split("?", 2)[0] : null;
-      return href == this.currentRoute?.route;
-  }
+        if (
+            normalizedPath === "" ||
+            normalizedPath === "/"
+        ) {
+            return "/";
+        }
 
-  get routeParameters(): RouteParameters{
-    return this._routeParameters;
-  }
+        const pathWithLeadingSlash =
+            normalizedPath.startsWith("/")
+                ? normalizedPath
+                : `/${normalizedPath}`;
 
-  set routeParameters(params: RouteParameters){
-    this._routeParameters = params;
-  }
+        return pathWithLeadingSlash.replace(
+            /\/+$/,
+            "",
+        );
+    }
 
-  get queryParameters(): Record<string, string|number>{
-    return this.app.queryParameters;
-  }
+    protected _normalizeBaseUrl(
+        baseUrl: string,
+    ): string {
+        if (!baseUrl || baseUrl === "/") {
+            return "";
+        }
 
-  get app(): TApp {
-    return this._app;
-  }
+        return this._normalizePath(baseUrl);
+    }
 
-  get baseLayout(): CustomElementClass {
-    return this._baseLayout;
-  }
+    protected _sortRoutes(
+        routeMap: Map<string, ParsedRoute<TApp>>,
+    ): Map<string, ParsedRoute<TApp>> {
+        const sortedRoutes = Array.from(
+            routeMap.entries(),
+        ).sort(([firstPath], [secondPath]) => {
+            const lengthDifference =
+                secondPath.length - firstPath.length;
 
-  get defaultTarget(): string {
-    return this._defaultTarget;
-  }
+            if (lengthDifference !== 0) {
+                return lengthDifference;
+            }
 
-  get indexRoute(): string {
-    return this._indexRoute;
-  }
+            if (
+                firstPath.includes("<str:") &&
+                secondPath.includes("<int:")
+            ) {
+                return -1;
+            }
 
-  get baseUrl(): string {
-    return this._baseUrl;
-  }
+            if (
+                firstPath.includes("<int:") &&
+                secondPath.includes("<str:")
+            ) {
+                return 1;
+            }
 
-  get routes(): Route[] {
-    return this._routes;
-  }
+            return 0;
+        });
 
-  get routesMap(): ReadonlyMap<string, ParsedRoute> {
-    return this._routesMap;
-  }
+        return new Map(sortedRoutes);
+    }
 
-  get currentRoute(): ParsedRoute|null{
-    return this._currentRoute;
-  }
+    protected _popStateHandler = async (
+        event: PopStateEvent,
+    ): Promise<void> => {
+        await this.route();
 
-  set currentRoute(route: ParsedRoute|null){
-    this._currentRoute = route;
-  }
+        const state = event.state as
+            | CurrentState
+            | null;
 
-  get origin(){
-    return location.origin;
-  }
+        if (state?.scrollPosition) {
+            window.scrollTo(
+                state.scrollPosition.x,
+                state.scrollPosition.y,
+            );
+        }
+    };
 
-  get hash(){
-    return this.app.hash;
-  }
+    protected _clickHandler = async (
+        event: MouseEvent,
+    ): Promise<void> => {
+        if (
+            event.defaultPrevented ||
+            event.button !== 0 ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey ||
+            event.altKey
+        ) {
+            return;
+        }
 
-  get port(){
-    return this.app.port;
-  }
+        if (!(event.target instanceof Element)) {
+            return;
+        }
 
-  get hostname(){
-    return this.app.hostname;
-  }
+        const anchor =
+            event.target.closest<HTMLAnchorElement>(
+                "a",
+            );
 
-  get host(){
-    return location.host;
-  }
+        if (
+            !anchor ||
+            anchor.hasAttribute("router-ignore") ||
+            anchor.hasAttribute("download") ||
+            anchor.target === "_blank" ||
+            !anchor.href ||
+            anchor.protocol === "mailto:" ||
+            anchor.protocol === "tel:" ||
+            anchor.origin !== location.origin
+        ) {
+            return;
+        }
 
-  get pathname(){
-    return location.pathname;
-  }
+        event.preventDefault();
+
+        if (this._inTransition) {
+            return;
+        }
+
+        this._inTransition = true;
+
+        try {
+            await this._handleLinkPress(anchor.href);
+        } catch (error: unknown) {
+            await this._app.handleError(
+                new RouteFailedError({
+                    cause: error,
+                }),
+            );
+        } finally {
+            this._inTransition = false;
+        }
+    };
+
+    route = async (): Promise<void> => {
+        try {
+            let path = location.pathname;
+
+            if (
+                this.baseUrl &&
+                path.startsWith(this.baseUrl)
+            ) {
+                path = path.slice(
+                    this.baseUrl.length,
+                );
+            }
+
+            if (!path) {
+                path = this.indexRoute;
+            }
+
+            const matchedPath =
+                this._matchRoute(path);
+
+            if (
+                matchedPath.authentication
+                    ?.authenticationRequired
+            ) {
+                const authenticated =
+                    await this.isAuthenticated();
+
+                if (!authenticated) {
+                    throw new AuthenticationError(
+                        matchedPath.path,
+                    );
+                }
+
+                const requiredRoles =
+                    matchedPath.authentication
+                        .rolesRequired;
+
+                if (requiredRoles.length > 0) {
+                    const authorized =
+                        await this.checkUserRoles(
+                            requiredRoles,
+                        );
+
+                    if (!authorized) {
+                        throw new AuthorizationError(
+                            matchedPath.path,
+                            requiredRoles,
+                        );
+                    }
+                }
+            }
+
+            await this._loadPath(matchedPath);
+        } catch (error: unknown) {
+            await this.app.handleError(error);
+        }
+    };
+
+    protected _loadPath = async (
+        matchedPath: MatchedRoute<TApp>,
+    ): Promise<void> => {
+        this._emitRouteEvent(routeEventsEnum.START);
+
+        await this._renderLayout(
+            matchedPath.layout,
+        );
+
+        const layout = this.app.querySelector(
+            matchedPath.layout.tagName,
+        ) as CustomElement<TApp> | null;
+
+        if (!layout) {
+            throw new Error(
+                `Failed to render layout '${matchedPath.layout.tagName}'.`,
+            );
+        }
+
+        await layout.initComplete;
+
+        const handlers = Object.entries(
+            matchedPath.handlers,
+        );
+
+        for (
+            const [index, [target, handler]]
+            of handlers.entries()
+        ) {
+            const targetContainer =
+                this.app.querySelector(target);
+
+            if (!targetContainer) {
+                throw new Error(
+                    `Failed to find route target '${target}'.`,
+                );
+            }
+
+            const existingElement =
+                targetContainer.querySelector(
+                    handler.tagName,
+                );
+
+            if (
+                existingElement &&
+                (
+                    handlers.length !== 1 ||
+                    index < handlers.length - 1
+                )
+            ) {
+                continue;
+            }
+
+            const hashId = this.app.generateHash();
+            const handlerArgs =
+                matchedPath.args?.[handler.tagName];
+
+            this.app.originalInnerHTML.call(
+                targetContainer,
+                handler.generate(
+                    hashId,
+                    handlerArgs ?? null,
+                ),
+            );
+
+            const generatedHandler =
+                this.app.querySelector(
+                    `[data-hash-id="${hashId}"]`,
+                ) as CustomElement<TApp> | null;
+
+            if (generatedHandler) {
+                await generatedHandler.initComplete;
+            }
+        }
+
+        this._setTitle(matchedPath.title);
+        this.currentRoute = matchedPath;
+        this._emitRouteEvent(
+            routeEventsEnum.FINISHED,
+        );
+    };
+
+    protected _renderLayout = async (
+        layout: CustomElementClass<TApp>,
+    ): Promise<void> => {
+        if (this.app.querySelector(layout.tagName)) {
+            return;
+        }
+
+        this.app.originalInnerHTML.call(
+            this.app.container,
+            layout.generate(),
+        );
+
+        const layoutElement =
+            this.app.querySelector(
+                layout.tagName,
+            ) as CustomElement<TApp> | null;
+
+        if (!layoutElement) {
+            throw new Error(
+                `Failed to generate layout '${layout.tagName}'.`,
+            );
+        }
+
+        await layoutElement.initComplete;
+        this._emitRouteEvent(
+            routeEventsEnum.LAYOUT_CHANGE_FINISHED,
+        );
+    };
+
+    protected _setTitle(
+        title: string | null,
+    ): void {
+        let titleElement =
+            document.head.querySelector("title");
+
+        if (!titleElement) {
+            titleElement =
+                document.createElement("title");
+            document.head.prepend(titleElement);
+        }
+
+        titleElement.innerText =
+            title ?? this.app.appName;
+    }
+
+    protected _emitRouteEvent(
+        eventType: string,
+    ): void {
+        this.app.container.dispatchEvent(
+            new CustomEvent(eventType, {
+                bubbles: true,
+                cancelable: true,
+            }),
+        );
+    }
+
+    protected _matchRoute(
+        path: string,
+    ): MatchedRoute<TApp> {
+        const normalizedPath =
+            this._normalizePath(path);
+
+        for (
+            const [routePattern, config]
+            of this._routesMap
+        ) {
+            const parameterNames: string[] = [];
+            const parameterTypes:
+                RouteParameterType[] = [];
+
+            const escapedPattern =
+                routePattern.replace(
+                    /[.*+?^${}()|[\]\\]/g,
+                    "\\$&",
+                );
+
+            const regexPath =
+                escapedPattern.replace(
+                    /<(str|int):([A-Za-z_]\w*)>/g,
+                    (
+                        _placeholder: string,
+                        type: RouteParameterType,
+                        parameterName: string,
+                    ): string => {
+                        parameterNames.push(
+                            parameterName,
+                        );
+                        parameterTypes.push(type);
+
+                        if (type === "str") {
+                            return "([^/]+)";
+                        }
+
+                        if (type === "int") {
+                            return "(\\d+)";
+                        }
+
+                        throw new UnsupportedRouteParameterType(
+                            type,
+                        );
+                    },
+                );
+
+            const match = normalizedPath.match(
+                new RegExp(`^${regexPath}$`),
+            );
+
+            if (!match) {
+                continue;
+            }
+
+            const parameters: RouteParameters = {};
+
+            for (
+                let index = 0;
+                index < parameterNames.length;
+                index += 1
+            ) {
+                const parameterName =
+                    parameterNames[index];
+                const parameterType =
+                    parameterTypes[index];
+                const capturedValue =
+                    match[index + 1];
+
+                if (
+                    parameterName === undefined ||
+                    parameterType === undefined ||
+                    capturedValue === undefined
+                ) {
+                    throw new RouteParametersError(
+                        routePattern,
+                    );
+                }
+
+                parameters[parameterName] =
+                    parameterType === "int"
+                        ? Number.parseInt(
+                            capturedValue,
+                            10,
+                        )
+                        : decodeURIComponent(
+                            capturedValue,
+                        );
+            }
+
+            this._routeParameters = parameters;
+
+            return {
+                ...config,
+                path: normalizedPath,
+                pattern: routePattern,
+                parameters,
+            };
+        }
+
+        this._routeParameters = {};
+        throw new RouteNotFoundError(
+            normalizedPath,
+        );
+    }
+
+    protected _handleLinkPress = async (
+        href: string,
+    ): Promise<void> => {
+        const destination = new URL(
+            href,
+            location.href,
+        );
+
+        history.pushState(
+            this._getCurrentState(),
+            "",
+            `${destination.pathname}${destination.search}${destination.hash}`,
+        );
+
+        await this.route();
+    };
+
+    protected _getCurrentState(): CurrentState {
+        return {
+            scrollPosition: {
+                x: window.scrollX,
+                y: window.scrollY,
+            },
+        };
+    }
+
+    urlIsCurrentPath(href: string): boolean {
+        const url = new URL(href, location.href);
+        const path = this._normalizePath(
+            url.pathname.replace(this.baseUrl, ""),
+        );
+
+        return path === this.currentRoute?.route;
+    }
+
+    get routeParameters(): RouteParameters {
+        return this._routeParameters;
+    }
+
+    set routeParameters(
+        params: RouteParameters,
+    ) {
+        this._routeParameters = params;
+    }
+
+    get queryParameters(): Record<
+        string,
+        string | number
+    > {
+        return this.app.queryParameters;
+    }
+
+    get app(): TApp {
+        return this._app;
+    }
+
+    get baseLayout(): CustomElementClass<TApp> {
+        return this._baseLayout;
+    }
+
+    get defaultTarget(): string {
+        return this._defaultTarget;
+    }
+
+    get indexRoute(): string {
+        return this._indexRoute;
+    }
+
+    get baseUrl(): string {
+        return this._baseUrl;
+    }
+
+    get routes(): Route<TApp>[] {
+        return this._routes;
+    }
+
+    get routesMap(): ReadonlyMap<
+        string,
+        ParsedRoute<TApp>
+    > {
+        return this._routesMap;
+    }
+
+    get currentRoute(): ParsedRoute<TApp> | null {
+        return this._currentRoute;
+    }
+
+    set currentRoute(
+        route: ParsedRoute<TApp> | null,
+    ) {
+        this._currentRoute = route;
+    }
+
+    get origin(): string {
+        return location.origin;
+    }
+
+    get hash(): string {
+        return this.app.hash;
+    }
+
+    get port(): string {
+        return this.app.port;
+    }
+
+    get hostname(): string {
+        return this.app.hostname;
+    }
+
+    get host(): string {
+        return location.host;
+    }
+
+    get pathname(): string {
+        return location.pathname;
+    }
 }
 
 export default Router;

@@ -9,6 +9,16 @@ import doT, {
     type DoTTemplateSettings,
 } from "./dotjs/dot.js";
 
+import {
+    Lifecycle,
+    getLifecycleMethods,
+} from "./lifecycle.js";
+
+import {
+    requireElementMetadata,
+    type ElementMetadata,
+} from "./elementMetadata.js";
+
 export class RenderError extends Error {
     protected readonly elementName: string;
 
@@ -46,10 +56,15 @@ export class MethodExecutionError extends Error {
     protected readonly methodName: string;
     protected readonly elementName: string;
 
-    constructor(methodName: string, elementName: string) {
+    constructor(
+        methodName: string,
+        elementName: string,
+        options?: ErrorOptions,
+    ) {
         super(
             `Failed to execute method '${methodName}' ` +
             `on element '${elementName}'`,
+            options,
         );
 
         this.name = "MethodExecutionError";
@@ -65,10 +80,6 @@ export type ComponentMethod = (
     ...args: any[]
 ) => MaybePromise<unknown>;
 
-export type LifecycleMethod = (
-    this: CustomElement,
-) => MaybePromise<void>;
-
 export type MarkupMethod = (
     this: CustomElement,
 ) => MaybePromise<string>;
@@ -78,48 +89,10 @@ export type TemplateFunction = (
     ...args: unknown[]
 ) => unknown;
 
-export type ComponentMethods = Record<
-    string,
-    ComponentMethod
->;
-
-export type LifecycleMethods = Record<
-    string,
-    LifecycleMethod
->;
-
-export type PropertyDescriptorFactory = (
-    this: CustomElement,
-    propertyName: string,
-) => PropertyDescriptor;
-
-export type PropertyDefinition =
-    | PropertyDescriptor
-    | PropertyDescriptorFactory;
-
-export type PropertyDefinitions = Record<
-    string,
-    PropertyDefinition
->;
-
-export type CustomElementConfig = {
-    tagName: string;
-    markup: MarkupMethod;
-    methods?: ComponentMethods;
-    beforeInit?: LifecycleMethods;
-    beforeInitResolve?: LifecycleMethods;
-    afterInit?: LifecycleMethods;
-    beforeRerender?: LifecycleMethods;
-    afterRerender?: LifecycleMethods;
-    afterDisconnect?: LifecycleMethods;
-    dataField?: string | null;
-    define?: PropertyDefinitions;
-    templateFunctions?: Record<string, TemplateFunction>;
-};
-
 export type CustomElementClass<
-    TElement extends CustomElement = CustomElement,
-> = {
+    TApp extends App = App,
+    TElement extends CustomElement<TApp> = CustomElement<TApp>,
+> = CustomElementConstructor & {
     new (): TElement;
 
     readonly tagName: string;
@@ -195,149 +168,12 @@ export function randomId(
     );
 }
 
-export function defineValue(
-    initValue: unknown,
-    triggerRerender: boolean = true,
-): PropertyDescriptorFactory {
-    return function defineValueInner(
-        this: CustomElement,
-        name: string,
-    ): PropertyDescriptor {
-        const clonedValue =
-            window.structuredClone(initValue);
-
-        if (
-            clonedValue !== undefined &&
-            clonedValue !== null
-        ) {
-            this._values[name] = clonedValue;
-        }
-
-        return {
-            configurable: true,
-            enumerable: true,
-
-            get(this: CustomElement): unknown {
-                return this._values[name];
-            },
-
-            set(
-                this: CustomElement,
-                value: unknown,
-            ): void {
-                this._values[name] = value;
-
-                if (triggerRerender) {
-                    this._refreshBoundElements(name);
-                }
-            },
-        };
-    };
-}
-
-export function queryParameter(
-    name: string,
-    defaultValue: string|null = null,
-    triggerRerender: boolean = true,
-): PropertyDescriptorFactory {
-    if (!name) {
-        throw new Error(
-            "Missing or invalid query parameter name",
-        );
-    }
-
-    return function queryParameterInner(
-        this: CustomElement,
-    ): PropertyDescriptor {
-        return {
-            configurable: true,
-            enumerable: true,
-
-            get(this: CustomElement): string|null {
-                return (
-                    this.app.queryParameters[name] ??
-                    defaultValue
-                );
-            },
-
-            set(
-                this: CustomElement,
-                value: string|number,
-            ): void {
-                this.app.updateQueryParameters({[name]: `${value}`});
-
-                if (triggerRerender) {
-                    this._refreshBoundElements(
-                        `query-${name}`,
-                    );
-                }
-            },
-        };
-    };
-}
-
-export function querySelector<
-    TElement extends Element = Element,
->(
-    selector: string,
-): PropertyDescriptorFactory {
-    if (!selector) {
-        throw new Error(
-            "Missing or invalid selector for querySelector",
-        );
-    }
-
-    return function querySelectorInner(
-        this: CustomElement,
-    ): PropertyDescriptor {
-        return {
-            configurable: true,
-            enumerable: true,
-
-            get(this: CustomElement): TElement | null {
-                return this.querySelector<TElement>(
-                    selector,
-                );
-            },
-        };
-    };
-}
-
-export function querySelectorAll<
-    TElement extends Element = Element,
->(
-    selector: string,
-): PropertyDescriptorFactory {
-    if (!selector) {
-        throw new Error(
-            "Missing or invalid selector for querySelectorAll",
-        );
-    }
-
-    return function querySelectorAllInner(
-        this: CustomElement,
-    ): PropertyDescriptor {
-        return {
-            configurable: true,
-            enumerable: true,
-
-            get(
-                this: CustomElement,
-            ): NodeListOf<TElement> {
-                return this.querySelectorAll<TElement>(
-                    selector,
-                );
-            },
-        };
-    };
-}
-
 export const html = String.raw;
 
-export class CustomElement extends HTMLElement {
+export abstract class CustomElement<TApp extends App = App> extends HTMLElement {
     static readonly tagName: string = "";
 
-    protected _app: App | null = null;
+    protected _app: TApp | null = null;
 
     protected _resolveInitialization:
         | (() => void)
@@ -346,32 +182,7 @@ export class CustomElement extends HTMLElement {
     protected _templateSettings: TemplateSettings =
         createTemplateSettings();
 
-    protected _dataField: string | null = null;
-
     protected _parent: CustomElement | null = null;
-
-    protected _protectedProperties: string[] = [];
-
-    protected _methods: ComponentMethods | null = {};
-
-    protected _beforeInit: LifecycleMethods = {};
-
-    protected _beforeInitResolve: LifecycleMethods = {};
-
-    protected _afterInit: LifecycleMethods = {};
-
-    protected _beforeRerender: LifecycleMethods = {};
-
-    protected _afterRerender: LifecycleMethods = {};
-
-    protected _afterDisconnect: LifecycleMethods = {};
-
-    protected _define: PropertyDefinitions = {};
-
-    protected _templateFunctions: Record<
-        string,
-        TemplateFunction
-    > = {};
 
     protected _renderTime = 0;
 
@@ -383,8 +194,6 @@ export class CustomElement extends HTMLElement {
         "virtual-render-div";
 
     readonly initComplete: Promise<void>;
-
-    readonly _values: Record<string, unknown> = {};
 
     rndId: number;
 
@@ -406,42 +215,14 @@ export class CustomElement extends HTMLElement {
                 this._resolveInitialization = resolve;
             },
         );
+
     }
 
     async connectedCallback(): Promise<void> {
-        const deferValue =
-            this.getAttribute("defer");
-
-        const dataDeferValue =
-            this.getAttribute("data-jolt-defer");
-
-        const deferValues = [
-            "",
-            "true",
-            "defer",
-        ];
-
-        const deferred =
-            (
-                this.hasAttribute("defer") &&
-                deferValues.includes(
-                    deferValue ?? "",
-                )
-            ) ||
-            (
-                this.hasAttribute(
-                    "data-jolt-defer",
-                ) &&
-                deferValues.includes(
-                    dataDeferValue ?? "",
-                )
-            );
-
-        if (deferred) {
+        if (this.hasAttribute("defer")) {
             this._resolveInitComplete();
             return;
         }
-
         await this.initElement();
     }
 
@@ -449,20 +230,16 @@ export class CustomElement extends HTMLElement {
         if (!this._app) {
             return;
         }
-
         this._abort = true;
-
         this.app.removeEventListener(
             dataEventEnum.CHANGE,
             this._updateBoundAppDataParts,
         );
-
-        if (this._dataField) {
+        if (this.dataField) {
             this.app.removeDataListener(this);
         }
-
-        void this._runMethods(
-            this._afterDisconnect,
+        void this._runLifecycle(
+            Lifecycle.AFTER_DISCONNECT
         );
     }
 
@@ -480,7 +257,7 @@ export class CustomElement extends HTMLElement {
                 );
             }
 
-            this._app = appContainer.app;
+            this._app = appContainer.app as TApp;
 
             this.rndId = randomId();
 
@@ -522,24 +299,12 @@ export class CustomElement extends HTMLElement {
                 }
             }
 
-            this._dataField =
-                this.getAttribute("data-field") ??
-                this._dataField;
 
             this._templateSettings =
                 createTemplateSettings();
 
-            this._assignTemplateFunctions();
-
-            this._protectedProperties =
-                Object.getOwnPropertyNames(this);
-
-            this._assignMethods();
-
-            this._assignDefinedGettersAndSetters();
-
-            await this._runMethods(
-                this._beforeInit,
+            await this._runLifecycle(
+                Lifecycle.BEFORE_INIT
             );
 
             this.app.addEventListener(
@@ -547,7 +312,7 @@ export class CustomElement extends HTMLElement {
                 this._updateBoundAppDataParts,
             );
 
-            if (this._dataField) {
+            if (this.dataField) {
                 this.app.registerDataListener(this);
             }
 
@@ -560,14 +325,14 @@ export class CustomElement extends HTMLElement {
 
             await this._waitForSubelements();
 
-            await this._runMethods(
-                this._beforeInitResolve,
+            await this._runLifecycle(
+                Lifecycle.BEFORE_INIT_RESOLVE,
             );
 
             this._resolveInitComplete();
 
-            await this._runMethods(
-                this._afterInit,
+            await this._runLifecycle(
+                Lifecycle.AFTER_INIT,
             );
         } catch (error: unknown) {
             this._abort = true;
@@ -593,109 +358,17 @@ export class CustomElement extends HTMLElement {
         console.error(error);
     }
 
-    protected _assignTemplateFunctions(): void {
-        for (
-            const [
-                name,
-                templateFunction,
-            ] of Object.entries(
-                this._templateFunctions,
-            )
-        ) {
-            this._templateSettings.def[name] =
-                templateFunction.bind(this);
-        }
-    }
-
-    protected _assignMethods(): void {
-        if (!this._methods) {
-            return;
-        }
-
-        for (
-            const [name, method]
-            of Object.entries(this._methods)
-        ) {
-            this._assertPublicMemberName(
-                name,
-                "method",
-            );
-
-            Object.defineProperty(
-                this,
-                name,
-                {
-                    configurable: true,
-                    enumerable: false,
-                    writable: true,
-                    value: method.bind(this),
-                },
-            );
-        }
-
-        this._methods = null;
-    }
-
-    protected _assignDefinedGettersAndSetters(): void {
-        for (
-            const [
-                propertyName,
-                definition,
-            ] of Object.entries(this._define)
-        ) {
-            this._assertPublicMemberName(
-                propertyName,
-                "property",
-            );
-
-            const descriptor =
-                typeof definition === "function"
-                    ? definition.call(
-                          this,
-                          propertyName,
-                      )
-                    : definition;
-
-            Object.defineProperty(
-                this,
-                propertyName,
-                descriptor,
-            );
-        }
-    }
-
-    protected _assertPublicMemberName(
-        name: string,
-        memberType: "method" | "property",
-    ): void {
-        if (
-            this._protectedProperties.includes(
-                name,
-            ) ||
-            name.startsWith("_") ||
-            name.startsWith("#")
-        ) {
-            throw new Error(
-                `Illegal or protected ${memberType} ` +
-                `name '${name}' on element ` +
-                `'${this.tagName}'`,
-            );
-        }
-    }
-
-    protected async _runMethods(
-        methods: LifecycleMethods,
+    protected async _runLifecycle(
+        stage: Lifecycle,
     ): Promise<void> {
-        for (
-            const [name, method]
-            of Object.entries(methods)
-        ) {
+        for (const { name, method } of getLifecycleMethods(this, stage)) {
             try {
                 await method.call(this);
-            } catch {
+            } catch (error: unknown) {
                 throw new MethodExecutionError(
                     name,
                     this.tagName,
+                    { cause: error },
                 );
             }
         }
@@ -732,8 +405,8 @@ export class CustomElement extends HTMLElement {
     rerender = async (): Promise<void> => {
         this._templateSettings.dataBinds.clear();
 
-        await this._runMethods(
-            this._beforeRerender,
+        await this._runLifecycle(
+            Lifecycle.BEFORE_RERENDER,
         );
 
         await this.render();
@@ -744,8 +417,8 @@ export class CustomElement extends HTMLElement {
 
         await this._waitForSubelements();
 
-        await this._runMethods(
-            this._afterRerender,
+        await this._runLifecycle(
+            Lifecycle.AFTER_RERENDER,
         );
     };
 
@@ -787,6 +460,14 @@ export class CustomElement extends HTMLElement {
             `app.${customEvent.detail.field}`,
         );
     };
+
+    invalidate(bindingName: string): void {
+        if (!bindingName) {
+            throw new TypeError("Binding name cannot be empty.");
+        }
+
+        this._refreshBoundElements(bindingName);
+    }
 
     _refreshBoundElements(
         propertyName: string,
@@ -841,7 +522,6 @@ export class CustomElement extends HTMLElement {
                     `[data-render-time="${this.lastRender}"]`,
                 ),
             );
-
         this._setEventListeners(
             elementsWithEvents,
         );
@@ -881,7 +561,6 @@ export class CustomElement extends HTMLElement {
                     element,
                     methodName,
                 );
-
             element.addEventListener(
                 eventName,
                 listener,
@@ -897,8 +576,8 @@ export class CustomElement extends HTMLElement {
         element: Element,
         methodName: string,
     ): EventListener {
-        return (event: Event): void => {
-            void this._executeElementMethod(
+        return async (event: Event): Promise<void> => {
+            await this._executeElementMethod(
                 element,
                 methodName,
                 event,
@@ -940,14 +619,12 @@ export class CustomElement extends HTMLElement {
             ) {
                 await boundMethod.call(
                     this,
-                    element,
                     event,
                     args,
                 );
             } else {
                 await boundMethod.call(
                     this,
-                    element,
                     event,
                 );
             }
@@ -1192,11 +869,15 @@ export class CustomElement extends HTMLElement {
         this.app.setData(field, data);
     }
 
+    get data(): ReadonlyMap<string, unknown>{
+        return this.app.data;
+    }
+
     get lastRender(): number {
         return this._lastRender;
     }
 
-    get app(): App {
+    get app(): TApp {
         if (!this._app) {
             throw new Error(
                 `Application object not found ` +
@@ -1207,8 +888,18 @@ export class CustomElement extends HTMLElement {
         return this._app;
     }
 
+    get metadata(): ElementMetadata<TApp> {
+        return requireElementMetadata(
+            this.constructor as CustomElementClass<TApp>,
+        );
+    }
+
     get dataField(): string | null {
-        return this._dataField;
+        return this.metadata.dataField;
+    }
+
+    get groupName(): string | null {
+        return this.metadata.groupName;
     }
 
     get parent(): CustomElement | null {
@@ -1288,114 +979,4 @@ export function escapeHtmlAttribute(
         .replaceAll(">", "&gt;");
 }
 
-const validCustomElementTagName =
-    /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/;
-
-export function ElementFactory(
-    config: CustomElementConfig,
-): CustomElementClass {
-    const {
-        tagName,
-        markup,
-        methods = {},
-        beforeInit = {},
-        beforeInitResolve = {},
-        afterInit = {},
-        beforeRerender = {},
-        afterRerender = {},
-        afterDisconnect = {},
-        dataField = null,
-        define = {},
-        templateFunctions = {},
-    } = config;
-
-    if (!tagName) {
-        throw new Error(
-            "Missing tagName in ElementFactory",
-        );
-    }
-
-    if (typeof markup !== "function") {
-        throw new Error(
-            `Missing or invalid markup method ` +
-            `for element '${tagName}'`,
-        );
-    }
-
-    if (
-        !validCustomElementTagName.test(
-            tagName,
-        )
-    ) {
-        throw new Error(
-            `Element tagName '${tagName}' must ` +
-            `use valid custom-element kebab-case ` +
-            `syntax and contain at least one hyphen`,
-        );
-    }
-
-    class GeneratedCustomElement
-        extends CustomElement
-    {
-        static override readonly tagName =
-            tagName;
-
-        protected override _methods:
-            ComponentMethods | null = {
-                ...methods,
-            };
-
-        protected override _beforeInit:
-            LifecycleMethods = {
-                ...beforeInit,
-            };
-
-        protected override _beforeInitResolve:
-            LifecycleMethods = {
-                ...beforeInitResolve,
-            };
-
-        protected override _afterInit:
-            LifecycleMethods = {
-                ...afterInit,
-            };
-
-        protected override _beforeRerender:
-            LifecycleMethods = {
-                ...beforeRerender,
-            };
-
-        protected override _afterRerender:
-            LifecycleMethods = {
-                ...afterRerender,
-            };
-
-        protected override _afterDisconnect:
-            LifecycleMethods = {
-                ...afterDisconnect,
-            };
-
-        protected override _dataField:
-            string | null = dataField;
-
-        protected override _define:
-            PropertyDefinitions = {
-                ...define,
-            };
-
-        protected override _templateFunctions:
-            Record<
-                string,
-                TemplateFunction
-            > = {
-                ...templateFunctions,
-            };
-
-        override markup: MarkupMethod =
-            markup;
-    }
-
-    return GeneratedCustomElement;
-}
-
-export default ElementFactory;
+export default CustomElement;

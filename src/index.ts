@@ -1,45 +1,80 @@
+
 export {
     default as App,
     dataEventEnum,
+    ExtensionNotRegistered,
 } from "./app.js";
 
 export type {
+    AppConfig,
     AppContainer,
+    AppDataChangeDetail,
+    AppDataChangeEvent,
+    DataStructure,
+    ExtensionInitializer,
 } from "./app.js";
 
 export {
-    default as ElementFactory,
-    CustomElement,
-    defineValue,
-    queryParameter,
-    querySelector,
-    querySelectorAll,
-    html,
+    component,
+    page,
+    layout,
+    getElementMetadata,
+    requireElementMetadata,
+} from "./elementMetadata.js";
+
+export {
+    default as CustomElement,
+    html
 } from "./customElement.js";
 
 export type {
-    CustomElementClass,
-    CustomElementConfig,
-    ComponentMethod,
-    LifecycleMethod,
-    MarkupMethod,
-} from "./customElement.js";
+    CustomElementClass
+} from "./customElement.js"
+
+export type {
+    ElementKind,
+    ElementMetadata,
+    ComponentConfigs,
+    ComponentMetadata,
+    PageConfigs,
+    PageMetadata,
+    LayoutMetadata,
+    AuthenticationMetadata,
+} from "./elementMetadata.js";
 
 export {
     default as Router,
+    routeEventsEnum,
+    RouteFailedError,
+    RouteNotFoundError,
+    RouteParametersError,
+    UnsupportedRouteParameterType,
+    AuthenticationError,
+    AuthorizationError,
 } from "./router.js";
 
 export type {
+    Authentication,
+    Route,
+    RouteExtras,
+    RouteHandlers,
     RouteParameters,
+    ParsedRoute,
     MatchedRoute,
+    RouterConfig,
+    HandlerArgs,
+    RouteHandlerArgs,
 } from "./router.js";
 
 export {
-    default as Authenticator,
-} from "./authenticator.js";
+    lifecycle,
+    Lifecycle
+} from "./lifecycle.js"
 
 export {
-    default as ErrorHandler,
-} from "./errorHandler.js";
-
-export * from "./errors.js";
+    react,
+    reactFactory,
+    queryParam,
+    select,
+    selectAll
+} from "./properties.js"
