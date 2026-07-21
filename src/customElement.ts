@@ -18,6 +18,7 @@ import {
     requireElementMetadata,
     type ElementMetadata,
 } from "./elementMetadata.js";
+import { AuthenticationError, AuthorizationError, InternalServerError, NetworkError } from "./errors.js";
 
 export class RenderError extends Error {
     protected readonly elementName: string;
@@ -70,6 +71,15 @@ export class MethodExecutionError extends Error {
         this.name = "MethodExecutionError";
         this.methodName = methodName;
         this.elementName = elementName;
+    }
+}
+
+export class MarkupFetchError extends Error{
+    protected elementName: string;
+    constructor(msg: string, tagName: string){
+        super(msg);
+        this.elementName = tagName;
+        this.name = "MarkupFetchError";
     }
 }
 
@@ -384,15 +394,13 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             ) {
                 throw error;
             }
-
             throw new RenderError(this.tagName);
         }
     }
 
     render = async (): Promise<void> => {
         try {
-            const renderedHtml =
-                await this._markup();
+            const renderedHtml = this.useServer ? await this.fetchHTML() : await this._markup();
 
             this.innerHTML = renderedHtml;
         } catch (error: unknown) {
@@ -401,6 +409,44 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             await this._handleError(error);
         }
     };
+
+    fetchHTML = async (): Promise<string> => {
+        if(!this.app.serverComponentsUrl){
+            throw new Error("If using server components you need to provide the 'serverComponentsUrl' property at application initialization.")
+        }
+        try{
+            let response = await fetch(this.app.serverComponentsUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    tagName: this.tagName.toLowerCase(),
+                    groupName: this.groupName == null ? "default" : this.groupName,
+                    queryParameters: this.app.queryParameters || {},
+                    routeParameters: this.app?.router.routeParameters || {}
+                })
+            })
+            if(!response.ok){
+                if(response.status == 401){
+                    throw new AuthenticationError("Missing authentication for requested route");
+                }
+                if(response.status == 403){
+                    throw new AuthorizationError("User is not authorized for this route", []);
+                }
+                if(response.status == 500){
+                    throw new InternalServerError("Something went wrong on the server during component content fetch");
+                }
+            }
+            try{
+                return await response.text();
+            }catch(e: unknown){
+                throw new MarkupFetchError("Failed to parse fetched html markup.", this.tagName);
+            }
+        }catch(e: unknown){
+            throw new NetworkError("Failed to fetch requested content. Server unresponsive.");
+        }
+    }
 
     rerender = async (): Promise<void> => {
         this._templateSettings.dataBinds.clear();

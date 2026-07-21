@@ -4,12 +4,17 @@ export function handles(...errorTypes) {
     if (errorTypes.length === 0) {
         throw new Error("@handles requires at least one Error class.");
     }
-    return (_target, _propertyKey, descriptor) => {
-        const method = descriptor.value;
-        if (typeof method !== "function") {
-            throw new TypeError("@handles can only decorate methods.");
+    return function handlesDecorator(method, context) {
+        if (context.static) {
+            throw new TypeError("@handles cannot decorate static methods.");
         }
-        method[HANDLED_ERRORS] = errorTypes;
+        if (context.private) {
+            throw new TypeError("@handles cannot decorate private methods.");
+        }
+        const decoratedMethod = method;
+        decoratedMethod[HANDLED_ERRORS] = [
+            ...errorTypes,
+        ];
     };
 }
 export default class ErrorHandler {
@@ -61,6 +66,9 @@ export default class ErrorHandler {
             errorType = Object.getPrototypeOf(errorType);
         }
         return false;
+    }
+    get app() {
+        return this._app;
     }
 }
 //# sourceMappingURL=errorHandler.js.map

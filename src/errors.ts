@@ -3,6 +3,19 @@ import { AuthenticationError, AuthorizationError } from "./auth.js";
 import { NotImplementedError } from "./utilities.js";
 import {RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType} from "./router.js";
 
+class NetworkError extends Error{
+    constructor(msg: string){
+        super(msg);
+        this.name = "NetworkError";
+    }
+}
+
+class InternalServerError extends Error{
+    constructor(msg: string){
+        super(msg);
+        this.name = "InternalServerError";
+    }
+}
 
 export {
     RenderError,
@@ -16,4 +29,6 @@ export {
     RouteNotFoundError,
     RouteParametersError,
     UnsupportedRouteParameterType,
+    NetworkError,
+    InternalServerError
 }

@@ -1,5 +1,7 @@
 import App from "./app.js";
 import { type DoTDataBindTemplates, type DoTSanitizeFunction, type DoTTemplateSettings } from "./dotjs/dot.js";
+import { Lifecycle } from "./lifecycle.js";
+import { type ElementMetadata } from "./elementMetadata.js";
 export declare class RenderError extends Error {
     protected readonly elementName: string;
     constructor(elementName: string);
@@ -15,33 +17,17 @@ export declare class DotJSEngineError extends Error {
 export declare class MethodExecutionError extends Error {
     protected readonly methodName: string;
     protected readonly elementName: string;
-    constructor(methodName: string, elementName: string);
+    constructor(methodName: string, elementName: string, options?: ErrorOptions);
+}
+export declare class MarkupFetchError extends Error {
+    protected elementName: string;
+    constructor(msg: string, tagName: string);
 }
 type MaybePromise<T> = T | Promise<T>;
 export type ComponentMethod = (this: CustomElement, ...args: any[]) => MaybePromise<unknown>;
-export type LifecycleMethod = (this: CustomElement) => MaybePromise<void>;
 export type MarkupMethod = (this: CustomElement) => MaybePromise<string>;
 export type TemplateFunction = (this: CustomElement, ...args: unknown[]) => unknown;
-export type ComponentMethods = Record<string, ComponentMethod>;
-export type LifecycleMethods = Record<string, LifecycleMethod>;
-export type PropertyDescriptorFactory = (this: CustomElement, propertyName: string) => PropertyDescriptor;
-export type PropertyDefinition = PropertyDescriptor | PropertyDescriptorFactory;
-export type PropertyDefinitions = Record<string, PropertyDefinition>;
-export type CustomElementConfig = {
-    tagName: string;
-    markup: MarkupMethod;
-    methods?: ComponentMethods;
-    beforeInit?: LifecycleMethods;
-    beforeInitResolve?: LifecycleMethods;
-    afterInit?: LifecycleMethods;
-    beforeRerender?: LifecycleMethods;
-    afterRerender?: LifecycleMethods;
-    afterDisconnect?: LifecycleMethods;
-    dataField?: string | null;
-    define?: PropertyDefinitions;
-    templateFunctions?: Record<string, TemplateFunction>;
-};
-export type CustomElementClass<TElement extends CustomElement = CustomElement> = {
+export type CustomElementClass<TApp extends App = App, TElement extends CustomElement<TApp> = CustomElement<TApp>> = CustomElementConstructor & {
     new (): TElement;
     readonly tagName: string;
     generate(hashId?: string | null, args?: Record<string, unknown> | null): string;
@@ -69,36 +55,20 @@ export type TemplateSettings = DoTTemplateSettings & {
     sanitizeFunc: DoTSanitizeFunction;
 };
 export declare function randomId(max?: number, min?: number): number;
-export declare function defineValue(initValue: unknown, triggerRerender?: boolean): PropertyDescriptorFactory;
-export declare function queryParameter(name: string, defaultValue?: string | null, triggerRerender?: boolean): PropertyDescriptorFactory;
-export declare function querySelector<TElement extends Element = Element>(selector: string): PropertyDescriptorFactory;
-export declare function querySelectorAll<TElement extends Element = Element>(selector: string): PropertyDescriptorFactory;
 export declare const html: (template: {
     raw: readonly string[] | ArrayLike<string>;
 }, ...substitutions: any[]) => string;
-export declare class CustomElement extends HTMLElement {
+export declare abstract class CustomElement<TApp extends App = App> extends HTMLElement {
     static readonly tagName: string;
-    protected _app: App | null;
+    protected _app: TApp | null;
     protected _resolveInitialization: (() => void) | null;
     protected _templateSettings: TemplateSettings;
-    protected _dataField: string | null;
     protected _parent: CustomElement | null;
-    protected _protectedProperties: string[];
-    protected _methods: ComponentMethods | null;
-    protected _beforeInit: LifecycleMethods;
-    protected _beforeInitResolve: LifecycleMethods;
-    protected _afterInit: LifecycleMethods;
-    protected _beforeRerender: LifecycleMethods;
-    protected _afterRerender: LifecycleMethods;
-    protected _afterDisconnect: LifecycleMethods;
-    protected _define: PropertyDefinitions;
-    protected _templateFunctions: Record<string, TemplateFunction>;
     protected _renderTime: number;
     protected _lastRender: number;
     protected _abort: boolean;
     protected readonly _virtualRenderDiv = "virtual-render-div";
     readonly initComplete: Promise<void>;
-    readonly _values: Record<string, unknown>;
     rndId: number;
     hashId: string;
     markup: MarkupMethod;
@@ -108,17 +78,15 @@ export declare class CustomElement extends HTMLElement {
     initElement: () => Promise<void>;
     protected _resolveInitComplete(): void;
     protected _handleError(error: unknown): Promise<void>;
-    protected _assignTemplateFunctions(): void;
-    protected _assignMethods(): void;
-    protected _assignDefinedGettersAndSetters(): void;
-    protected _assertPublicMemberName(name: string, memberType: "method" | "property"): void;
-    protected _runMethods(methods: LifecycleMethods): Promise<void>;
+    protected _runLifecycle(stage: Lifecycle): Promise<void>;
     protected _markup(): Promise<string>;
     render: () => Promise<void>;
+    fetchHTML: () => Promise<string>;
     rerender: () => Promise<void>;
     protected _waitForSubelements(): Promise<void>;
     generateHash(length?: number): string;
     protected _updateBoundAppDataParts: EventListener;
+    invalidate(bindingName: string): void;
     _refreshBoundElements(propertyName: string): void;
     protected _hydrate: () => void;
     protected _setEventListeners(elementsWithEvents: ElementEventConfig[]): void;
@@ -134,9 +102,13 @@ export declare class CustomElement extends HTMLElement {
     protected _replaceColonWithData(template: string): string;
     getData(field: string): unknown;
     setData(field: string, data: unknown): void;
+    get data(): ReadonlyMap<string, unknown>;
     get lastRender(): number;
-    get app(): App;
+    get app(): TApp;
+    get metadata(): ElementMetadata<TApp>;
     get dataField(): string | null;
+    get groupName(): string | null;
+    get useServer(): boolean | null;
     get parent(): CustomElement | null;
     get args(): Record<string, unknown>;
     get dotJSengine(): (template: string) => string;
@@ -144,6 +116,5 @@ export declare class CustomElement extends HTMLElement {
     static generate(hashId?: string | null, args?: Record<string, unknown> | null): string;
 }
 export declare function escapeHtmlAttribute(value: string): string;
-export declare function ElementFactory(config: CustomElementConfig): CustomElementClass;
-export default ElementFactory;
+export default CustomElement;
 //# sourceMappingURL=customElement.d.ts.map

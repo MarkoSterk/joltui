@@ -37,5 +37,31 @@ export function auth(
     };
 }
 
-export class AuthenticationError extends Error {}
-export class AuthorizationError extends Error {}
+export class AuthenticationError extends Error {
+    protected readonly path: string;
+
+    constructor(
+        path: string,
+        options?: ErrorOptions,
+    ) {
+        super("User not authenticated", options);
+        this.path = path;
+        this.name = "AuthenticationError";
+    }
+}
+
+export class AuthorizationError extends Error {
+    protected readonly path: string;
+    protected readonly roles: unknown[];
+
+    constructor(
+        path: string,
+        roles: unknown[],
+        options?: ErrorOptions,
+    ) {
+        super("User is not authorized for this route", options);
+        this.path = path;
+        this.roles = roles;
+        this.name = "AuthorizationError";
+    }
+}

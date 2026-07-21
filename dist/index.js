@@ -1,7 +1,10 @@
 export { default as App, dataEventEnum, } from "./app.js";
-export { default as ElementFactory, CustomElement, defineValue, queryParameter, querySelector, querySelectorAll, html, } from "./customElement.js";
-export { default as Router, } from "./router.js";
-export { default as Authenticator, } from "./authenticator.js";
-export { default as ErrorHandler, } from "./errorHandler.js";
-export * from "./errors.js";
+export { component, page, layout, getElementMetadata, requireElementMetadata, } from "./elementMetadata.js";
+export { default as CustomElement, html } from "./customElement.js";
+export { default as Router, routeEventsEnum, } from "./router.js";
+export { auth } from "./auth.js";
+export { lifecycle, Lifecycle } from "./lifecycle.js";
+export { react, reactFactory, queryParam, select, selectAll } from "./properties.js";
+export { default as ErrorHandler, handles } from "./errorHandler.js";
+export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError } from "./errors.js";
 //# sourceMappingURL=index.js.map

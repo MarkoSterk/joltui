@@ -1,1 +1,1 @@
-{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../../src/selectorParser/cssWhat/index.js"],"names":[],"mappings":"AACA,OAAO,EAAE,YAAY,EAAE,cAAc,EAAE,eAAe,EAAE,MAAM,YAAY,CAAC;AAC3E,OAAO,EAAE,WAAW,EAAE,KAAK,EAAE,MAAM,YAAY,CAAC;AAChD,OAAO,EAAE,SAAS,EAAE,MAAM,gBAAgB,CAAC;AAE3C,OAAO,EACH,YAAY,EAAE,cAAc,EAAE,eAAe,EAC7C,WAAW,EAAE,KAAK,EAAE,SAAS,EAChC,CAAA"}
+{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../../src/selectorParser/cssWhat/index.js"],"names":[],"mappings":"6BAC8D,YAAY;+BAAZ,YAAY;gCAAZ,YAAY;4BACvC,YAAY;sBAAZ,YAAY;0BACrB,gBAAgB"}

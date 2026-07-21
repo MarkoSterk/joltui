@@ -1,1 +1,1 @@
-{"version":3,"file":"types.d.ts","sourceRoot":"","sources":["../../../src/selectorParser/cssWhat/types.js"],"names":[],"mappings":"AACA,eAAO,IAAI,YAAY,KAAA,CAAC;AAexB;;;;;;GAMG;AACH,eAAO,MAAM,cAAc;IACvB,OAAO;IACP,UAAU;IACV,UAAU;IACV,aAAa;CAChB,CAAC;AACF,eAAO,IAAI,eAAe,KAAA,CAAC"}
+{"version":3,"file":"types.d.ts","sourceRoot":"","sources":["../../../src/selectorParser/cssWhat/types.js"],"names":[],"mappings":"AACA,+BAAwB;;;;;;;AA4BxB,kCAA2B"}

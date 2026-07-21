@@ -12,7 +12,7 @@ export default class CounterButton extends CustomElement<DevApp>{
         return html`
             <div>
                 <p data-bind="currentCount">Count: {{= this.currentCount }}</p>
-                <button type="button" class="btn btn-primary m-1 p-2" jolt-click="count">Click to count</button>
+                <button type="button" class="btn btn-primary m-1 p-2" @click="count">Click to count</button>
             </div>
         `
     }

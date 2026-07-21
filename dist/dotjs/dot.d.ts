@@ -1,35 +1,7 @@
-/**
- * doT.js render engine
- * MIT license
- *
- * https://olado.github.io/doT/index.html
- *
- * EXTENDED THE RENDER ENGINE TO PARSE data-bind ATTRIBUTES ON HTML ELEMENTS.
- * THIS IS CRUCIAL FOR SOME ADVANCED FUNCTIONALITY
- *
- */
-declare var doT: {
-    name: string;
-    version: string;
-    templateSettings: {
-        evaluate: RegExp;
-        interpolate: RegExp;
-        encode: RegExp;
-        use: RegExp;
-        useParams: RegExp;
-        define: RegExp;
-        defineParams: RegExp;
-        conditional: RegExp;
-        iterate: RegExp;
-        varname: string;
-        strip: boolean;
-        append: boolean;
-        selfcontained: boolean;
-        doNotSkipEncoded: boolean;
-    };
-    template: undefined;
-    compile: undefined;
-    log: boolean;
-};
 export default doT;
+declare namespace doT {
+    function encodeHTMLSource(doNotSkipEncoded: any): (code: any) => any;
+    function template(tmpl: any, c: any, def: any): Function;
+    function compile(tmpl: any, def: any): (data: any) => any;
+}
 //# sourceMappingURL=dot.d.ts.map

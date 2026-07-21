@@ -1,5 +1,6 @@
 import App from "./app.js";
 import { type CustomElementClass } from "./customElement.js";
+import { type PageMetadata } from "./elementMetadata.js";
 export declare const routeEventsEnum: {
     readonly START: "route-change.start";
     readonly FINISHED: "route-change.finished";
@@ -22,107 +23,106 @@ export declare class UnsupportedRouteParameterType extends Error {
     protected readonly type: string;
     constructor(type: string, options?: ErrorOptions);
 }
+export declare class AuthenticationError extends Error {
+    protected readonly path: string;
+    constructor(path: string, options?: ErrorOptions);
+}
+export declare class AuthorizationError extends Error {
+    protected readonly path: string;
+    protected readonly roles: unknown[];
+    constructor(path: string, roles: unknown[], options?: ErrorOptions);
+}
 export type RouteParameters = Record<string, string | number>;
-type Authentication = {
+export type Authentication = {
     authenticationRequired: boolean;
     rolesRequired: unknown[];
 };
-type RouteHandlers = Record<string, CustomElementClass>;
-type ScrollPosition = {
-    x: Number;
-    y: Number;
-};
-type CurrentState = {
-    scrollPosition: ScrollPosition;
-};
-type HandlerArgs = Record<string, unknown>;
-type RouteHandlerArgs = Record<string, HandlerArgs>;
-type Route = {
+export type HandlerArgs = Record<string, unknown>;
+export type RouteExtras = Record<string, unknown>;
+export type Route<TApp extends App = App> = {
     path: string;
-    handler: CustomElementClass;
-    target: string | null;
-    details: Record<string, unknown> | null;
+    handler: CustomElementClass<TApp>;
+    target: string;
+    layout: CustomElementClass<TApp>;
+    title: string | null;
+    extras: RouteExtras;
     authentication: Authentication | null;
-    handlers?: RouteHandlers;
-    layout?: CustomElementClass;
-    title?: string | null;
-    args?: HandlerArgs;
-    children?: Route[];
-    roles?: any[] | null;
+    roles: unknown[] | null;
 };
-export type MatchedRoute = ParsedRoute & {
+export type ParsedRoute<TApp extends App = App> = {
+    handler: CustomElementClass<TApp>;
+    target: string;
+    layout: CustomElementClass<TApp>;
+    title: string | null;
+    extras: RouteExtras;
+    authentication: Authentication | null;
+    args: HandlerArgs | null;
+    roles: unknown[] | null;
+    route: string;
+};
+export type MatchedRoute<TApp extends App = App> = ParsedRoute<TApp> & {
     path: string;
     pattern: string;
     parameters: RouteParameters;
-    handlers: RouteHandlers;
-    authentication: Authentication | null;
 };
-type ParsedRoute = {
-    handlers: RouteHandlers;
-    layout: CustomElementClass;
-    title: string | null;
-    details: Record<string, unknown> | null;
-    authentication: Authentication | null;
-    args: RouteHandlerArgs | null;
-    roles: any[] | null;
-    route: string;
-};
-type RouteGenerator = () => Route[];
-type RouterConfig<TApp extends App> = {
+export type RouterConfig<TApp extends App> = {
     baseUrl?: string;
-    routes: RouteGenerator | Route[];
-    baseLayout: CustomElementClass;
+    baseLayout: CustomElementClass<TApp>;
     defaultTarget: string;
     indexRoute?: string;
     app: TApp;
 };
-type ParseRoutesConfig = {
-    routes: Route[];
-    parentPath?: string;
-    parentHandlers?: RouteHandlers;
-    layout?: CustomElementClass;
+type ScrollPosition = {
+    x: number;
+    y: number;
+};
+type CurrentState = {
+    scrollPosition: ScrollPosition;
 };
 declare class Router<TApp extends App> {
     protected readonly _app: TApp;
-    protected readonly _baseLayout: CustomElementClass;
+    protected readonly _baseLayout: CustomElementClass<TApp>;
     protected readonly _defaultTarget: string;
     protected readonly _indexRoute: string;
     protected readonly _baseUrl: string;
-    protected readonly _routes: Route[];
-    protected readonly _routesMap: Map<string, ParsedRoute>;
-    protected _currentRoute: ParsedRoute | null;
+    protected readonly _routes: Route<TApp>[];
+    protected readonly _routesMap: Map<string, ParsedRoute<TApp>>;
+    protected _currentRoute: ParsedRoute<TApp> | null;
     protected _routeParameters: RouteParameters;
     protected _inTransition: boolean;
-    constructor({ baseUrl, routes, baseLayout, defaultTarget, indexRoute, app, }: RouterConfig<TApp>);
-    protected _handleRoutes(routes: RouteGenerator | Route[]): Route[];
-    protected _parseRoutes({ routes, parentPath, parentHandlers, layout, }: ParseRoutesConfig): Map<string, ParsedRoute>;
-    protected _registerCustomElement(element: CustomElementClass): void;
-    protected _joinPaths(parentPath: string, routePath: string): string;
+    constructor({ baseUrl, baseLayout, defaultTarget, indexRoute, app, }: RouterConfig<TApp>);
+    isAuthenticated: () => Promise<boolean>;
+    checkUserRoles: (_roles: unknown[]) => Promise<boolean>;
+    protected _discoverRoutes(): Route<TApp>[];
+    protected _createRouteFromMetadata(handler: CustomElementClass<TApp>, metadata: PageMetadata<TApp>): Route<TApp>;
+    protected _parseRoutes(routes: readonly Route<TApp>[]): Map<string, ParsedRoute<TApp>>;
     protected _normalizePath(path: string): string;
-    protected _sortRoutes(routeMap: Map<string, ParsedRoute>): Map<string, ParsedRoute>;
+    protected _normalizeBaseUrl(baseUrl: string): string;
+    protected _sortRoutes(routeMap: Map<string, ParsedRoute<TApp>>): Map<string, ParsedRoute<TApp>>;
     protected _popStateHandler: (event: PopStateEvent) => Promise<void>;
     protected _clickHandler: (event: MouseEvent) => Promise<void>;
-    route: () => Promise<any>;
-    protected _loadPath: (matchedPath: MatchedRoute) => Promise<void>;
-    protected _renderLayout: (layout: CustomElementClass) => Promise<void>;
-    protected _setTitle: (title: string | null) => void;
-    protected _emitRouteEvent: (eventType: string) => void;
-    protected _matchRoute(path: string): MatchedRoute;
+    route: () => Promise<void>;
+    protected _loadPath: (matchedPath: MatchedRoute<TApp>) => Promise<void>;
+    protected _renderLayout: (layout: CustomElementClass<TApp>) => Promise<void>;
+    protected _setTitle(title: string | null): void;
+    protected _emitRouteEvent(eventType: string): void;
+    protected _matchRoute(path: string): MatchedRoute<TApp>;
+    redirect(path: string): Promise<void>;
     protected _handleLinkPress: (href: string) => Promise<void>;
-    protected _getCurrentState: () => CurrentState;
-    urlIsCurrentPath: (href: string) => boolean;
+    protected _getCurrentState(): CurrentState;
+    urlIsCurrentPath(href: string): boolean;
     get routeParameters(): RouteParameters;
     set routeParameters(params: RouteParameters);
     get queryParameters(): Record<string, string | number>;
     get app(): TApp;
-    get baseLayout(): CustomElementClass;
+    get baseLayout(): CustomElementClass<TApp>;
     get defaultTarget(): string;
     get indexRoute(): string;
     get baseUrl(): string;
-    get routes(): Route[];
-    get routesMap(): ReadonlyMap<string, ParsedRoute>;
-    get currentRoute(): ParsedRoute | null;
-    set currentRoute(route: ParsedRoute | null);
+    get routes(): Route<TApp>[];
+    get routesMap(): ReadonlyMap<string, ParsedRoute<TApp>>;
+    get currentRoute(): ParsedRoute<TApp> | null;
+    set currentRoute(route: ParsedRoute<TApp> | null);
     get origin(): string;
     get hash(): string;
     get port(): string;

@@ -43,12 +43,6 @@ export type {
 export {
     default as Router,
     routeEventsEnum,
-    RouteFailedError,
-    RouteNotFoundError,
-    RouteParametersError,
-    UnsupportedRouteParameterType,
-    AuthenticationError,
-    AuthorizationError,
 } from "./router.js";
 
 export {
@@ -59,13 +53,11 @@ export type {
     Authentication,
     Route,
     RouteExtras,
-    RouteHandlers,
     RouteParameters,
     ParsedRoute,
     MatchedRoute,
     RouterConfig,
     HandlerArgs,
-    RouteHandlerArgs,
 } from "./router.js";
 
 export {
@@ -91,3 +83,19 @@ export type {
     ErrorHandlerClass,
     ErrorHandlerMethod,
 } from "./errorHandler.js";
+
+
+export {
+    RenderError,
+    DotJSEngineError,
+    MissingMarkupMethod,
+    MethodExecutionError,
+    AuthenticationError,
+    AuthorizationError,
+    NotImplementedError,
+    RouteFailedError,
+    RouteNotFoundError,
+    RouteParametersError,
+    UnsupportedRouteParameterType,
+    NetworkError
+} from "./errors.js";

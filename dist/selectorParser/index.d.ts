@@ -1,4 +1,2 @@
-declare function escapeAttributeNames(astTokens: any): any;
-declare function transformSelector(selector: string): string;
-export { transformSelector, escapeAttributeNames };
+export declare function transformSelector(selector: string): string;
 //# sourceMappingURL=index.d.ts.map

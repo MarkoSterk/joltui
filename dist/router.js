@@ -1,6 +1,7 @@
 import App from "./app.js";
-import { CustomElement } from "./customElement.js";
-import { AuthenticationError, AuthorizationError } from "./authenticator.js";
+import { CustomElement, } from "./customElement.js";
+import { getElementMetadata, requireElementMetadata, } from "./elementMetadata.js";
+import { NotImplementedError } from "./utilities.js";
 export const routeEventsEnum = {
     START: "route-change.start",
     FINISHED: "route-change.finished",
@@ -17,7 +18,7 @@ export class RouteFailedError extends Error {
 export class RouteNotFoundError extends Error {
     route;
     constructor(route, options) {
-        super(`Route '{path}' not found`, options);
+        super(`Route '${route}' not found`, options);
         this.route = route;
         this.name = "RouteNotFoundError";
     }
@@ -25,17 +26,35 @@ export class RouteNotFoundError extends Error {
 export class RouteParametersError extends Error {
     path;
     constructor(path, options) {
-        super("Failed to parse route parameters for path " + path, options);
+        super(`Failed to parse route parameters for path '${path}'`, options);
         this.path = path;
-        this.name = "RoutePrametersError";
+        this.name = "RouteParametersError";
     }
 }
 export class UnsupportedRouteParameterType extends Error {
     type;
     constructor(type, options) {
-        super(`Route parameter of type '${type}' is not supported`, options);
+        super(`Route parameter type '${type}' is not supported`, options);
         this.type = type;
         this.name = "UnsupportedRouteParameterType";
+    }
+}
+export class AuthenticationError extends Error {
+    path;
+    constructor(path, options) {
+        super("User not authenticated", options);
+        this.path = path;
+        this.name = "AuthenticationError";
+    }
+}
+export class AuthorizationError extends Error {
+    path;
+    roles;
+    constructor(path, roles, options) {
+        super("User is not authorized for this route", options);
+        this.path = path;
+        this.roles = roles;
+        this.name = "AuthorizationError";
     }
 }
 function isCustomElementClass(value) {
@@ -50,117 +69,102 @@ class Router {
     _baseUrl;
     _routes;
     _routesMap;
-    _currentRoute;
-    _routeParameters;
-    _inTransition;
-    constructor({ baseUrl = "", routes, baseLayout, defaultTarget, indexRoute = "/", app, }) {
+    _currentRoute = null;
+    _routeParameters = {};
+    _inTransition = false;
+    constructor({ baseUrl = "", baseLayout, defaultTarget, indexRoute = "/", app, }) {
         if (!app) {
             throw new Error("Missing application object in router constructor");
         }
-        if (!routes) {
-            throw new Error("Missing routes object for router");
+        if (!isCustomElementClass(baseLayout)) {
+            throw new TypeError("Invalid base layout element class");
         }
-        if (!baseLayout ||
-            !isCustomElementClass(baseLayout)) {
-            throw new Error("Missing base layout element for the application");
+        const layoutMetadata = requireElementMetadata(baseLayout);
+        if (layoutMetadata.kind !== "layout") {
+            throw new TypeError(`Base layout '${baseLayout.name}' must use @layout.`);
+        }
+        if (typeof defaultTarget !== "string" ||
+            defaultTarget.trim().length === 0) {
+            throw new TypeError("Router defaultTarget must be a non-empty selector.");
         }
         this._app = app;
-        this._inTransition = false;
         this._baseLayout = baseLayout;
         this._defaultTarget = defaultTarget;
-        this._indexRoute = indexRoute;
-        this._baseUrl = baseUrl;
-        this._routes = this._handleRoutes(routes);
-        this._routesMap = this._parseRoutes({
-            routes: this._routes,
-        });
+        this._indexRoute = this._normalizePath(indexRoute);
+        this._baseUrl = this._normalizeBaseUrl(baseUrl);
+        this._routes = this._discoverRoutes();
+        this._routesMap = this._parseRoutes(this._routes);
         this.app.addEventListener("click", this._clickHandler);
         window.addEventListener("popstate", this._popStateHandler);
-        this._currentRoute = null;
-        this._routeParameters = {};
     }
-    _handleRoutes(routes) {
-        const parsedRoutes = typeof routes === "function"
-            ? routes.call(this)
-            : routes;
-        if (!Array.isArray(parsedRoutes)) {
-            throw new TypeError("Route generator must return an array of routes");
+    isAuthenticated = async () => {
+        throw new NotImplementedError("Router.isAuthenticated");
+    };
+    checkUserRoles = async (_roles) => {
+        throw new NotImplementedError("Router.checkUserRoles");
+    };
+    _discoverRoutes() {
+        const routes = [];
+        for (const elementClass of this.app.elements) {
+            if (!isCustomElementClass(elementClass)) {
+                throw new TypeError("Application elements must contain CustomElement classes.");
+            }
+            const metadata = getElementMetadata(elementClass);
+            if (!metadata || metadata.kind !== "page") {
+                continue;
+            }
+            routes.push(this._createRouteFromMetadata(elementClass, metadata));
         }
-        return parsedRoutes;
+        if (routes.length === 0) {
+            throw new Error("The application does not contain any @page components.");
+        }
+        return routes;
     }
-    _parseRoutes({ routes, parentPath = "", parentHandlers = {}, layout = this._baseLayout, }) {
+    _createRouteFromMetadata(handler, metadata) {
+        const layout = metadata.layout ??
+            this._baseLayout;
+        if (!isCustomElementClass(layout)) {
+            throw new TypeError(`Invalid layout configured for page '${handler.name}'.`);
+        }
+        const layoutMetadata = requireElementMetadata(layout);
+        if (layoutMetadata.kind !== "layout") {
+            throw new TypeError(`Page layout '${layout.name}' must use @layout.`);
+        }
+        if (!this.app.elements.includes(layout)) {
+            throw new Error(`Page layout '${layout.name}' is not registered ` +
+                `in app.elements.`);
+        }
+        return {
+            path: this._normalizePath(metadata.path),
+            handler,
+            target: metadata.target ??
+                this._defaultTarget,
+            layout,
+            title: metadata.title,
+            extras: metadata.extras,
+            authentication: metadata.authentication,
+            roles: metadata.roles,
+        };
+    }
+    _parseRoutes(routes) {
         const routeMap = new Map();
-        this._registerCustomElement(layout);
         for (const route of routes) {
-            if (!route.path) {
-                throw new Error("Route path cannot be empty");
+            if (routeMap.has(route.path)) {
+                throw new Error(`Duplicate route path '${route.path}'.`);
             }
-            if (!(route.handler instanceof CustomElement)) {
-                throw new TypeError(`Invalid route handler for path "${route.path}"`);
-            }
-            const fullPath = this._joinPaths(parentPath, route.path);
-            const routeLayout = route.layout ?? layout;
-            const target = route.target ?? this._defaultTarget;
-            this._registerCustomElement(routeLayout);
-            this._registerCustomElement(route.handler);
-            const handlers = {
-                ...parentHandlers,
-                [target]: route.handler,
-            };
-            if (route.handlers) {
-                for (const [handlerTarget, handler] of Object.entries(route.handlers)) {
-                    if (!(handler instanceof CustomElement)) {
-                        throw new TypeError(`Invalid handler for target "${handlerTarget}" on route "${fullPath}"`);
-                    }
-                    this._registerCustomElement(handler);
-                    handlers[handlerTarget] = handler;
-                }
-            }
-            const args = route.args !== undefined
-                ? {
-                    [route.handler.tagName]: route.args,
-                }
-                : null;
-            routeMap.set(fullPath, {
-                handlers,
-                layout: routeLayout,
-                title: route.title ?? null,
-                details: route.details ?? null,
-                authentication: route.authentication ?? null,
-                args,
-                roles: route.roles ?? null,
-                route: fullPath
+            routeMap.set(route.path, {
+                handler: route.handler,
+                target: route.target,
+                layout: route.layout,
+                title: route.title,
+                extras: route.extras,
+                authentication: route.authentication,
+                args: null,
+                roles: route.roles,
+                route: route.path,
             });
-            if (route.children?.length) {
-                const childRoutes = this._parseRoutes({
-                    routes: route.children,
-                    parentPath: fullPath,
-                    parentHandlers: handlers,
-                    layout: routeLayout,
-                });
-                for (const [path, config] of childRoutes) {
-                    if (routeMap.has(path)) {
-                        throw new Error(`Duplicate route path "${path}"`);
-                    }
-                    routeMap.set(path, config);
-                }
-            }
         }
         return this._sortRoutes(routeMap);
-    }
-    _registerCustomElement(element) {
-        if (!customElements.get(element.tagName)) {
-            this._app.registerCustomElements([element]);
-        }
-    }
-    _joinPaths(parentPath, routePath) {
-        if (!parentPath) {
-            return this._normalizePath(routePath);
-        }
-        if (routePath === "/") {
-            return this._normalizePath(parentPath);
-        }
-        return this._normalizePath(`${parentPath}/${routePath}`);
     }
     _normalizePath(path) {
         const normalizedPath = path
@@ -174,6 +178,12 @@ class Router {
             ? normalizedPath
             : `/${normalizedPath}`;
         return pathWithLeadingSlash.replace(/\/+$/, "");
+    }
+    _normalizeBaseUrl(baseUrl) {
+        if (!baseUrl || baseUrl === "/") {
+            return "";
+        }
+        return this._normalizePath(baseUrl);
     }
     _sortRoutes(routeMap) {
         const sortedRoutes = Array.from(routeMap.entries()).sort(([firstPath], [secondPath]) => {
@@ -195,32 +205,32 @@ class Router {
     }
     _popStateHandler = async (event) => {
         await this.route();
-        if (event.state && event.state.scrollPosition) {
-            const { x, y } = event.state.scrollPosition;
-            window.scrollTo(x, y);
+        const state = event.state;
+        if (state?.scrollPosition) {
+            window.scrollTo(state.scrollPosition.x, state.scrollPosition.y);
         }
     };
     _clickHandler = async (event) => {
-        if (event.defaultPrevented || event.button !== 0) {
+        if (event.defaultPrevented ||
+            event.button !== 0 ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey ||
+            event.altKey) {
             return;
         }
-        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
+        if (!(event.target instanceof Element)) {
             return;
         }
-        const target = event.target;
-        if (!(target instanceof Element)) {
-            return;
-        }
-        const anchor = target.closest("a");
-        if (!anchor) {
-            return;
-        }
-        if (anchor.hasAttribute("router-ignore") ||
+        const anchor = event.target.closest("a");
+        if (!anchor ||
+            anchor.hasAttribute("router-ignore") ||
             anchor.hasAttribute("download") ||
             anchor.target === "_blank" ||
             !anchor.href ||
             anchor.protocol === "mailto:" ||
-            anchor.protocol === "tel:") {
+            anchor.protocol === "tel:" ||
+            anchor.origin !== location.origin) {
             return;
         }
         event.preventDefault();
@@ -229,11 +239,12 @@ class Router {
         }
         this._inTransition = true;
         try {
-            await this._handleLinkPress(anchor.href);
+            await this.redirect(anchor.href);
         }
         catch (error) {
-            const e = new RouteFailedError();
-            await this._app.handleError(e);
+            await this._app.handleError(new RouteFailedError({
+                cause: error,
+            }));
         }
         finally {
             this._inTransition = false;
@@ -242,84 +253,85 @@ class Router {
     route = async () => {
         try {
             let path = location.pathname;
-            path = path.replace(this.baseUrl, "");
-            if (path === "") {
-                path = "/";
+            if (this.baseUrl &&
+                path.startsWith(this.baseUrl)) {
+                path = path.slice(this.baseUrl.length);
+            }
+            if (!path) {
+                path = this.indexRoute;
             }
             const matchedPath = this._matchRoute(path);
-            if (matchedPath?.authentication?.authenticationRequired) {
-                if (!this.app.authenticator.isAuthenticated()) {
+            if (matchedPath.authentication
+                ?.authenticationRequired) {
+                const authenticated = await this.isAuthenticated();
+                if (!authenticated) {
                     throw new AuthenticationError(matchedPath.path);
                 }
-                if (matchedPath?.authentication?.rolesRequired) {
-                    if (!this.app.authenticator.checkUserRoles(matchedPath.authentication?.rolesRequired)) {
-                        throw new AuthorizationError(matchedPath.path, matchedPath.authentication?.rolesRequired);
+                const requiredRoles = matchedPath.authentication
+                    .rolesRequired;
+                if (requiredRoles.length > 0) {
+                    const authorized = await this.checkUserRoles(requiredRoles);
+                    if (!authorized) {
+                        throw new AuthorizationError(matchedPath.path, requiredRoles);
                     }
                 }
             }
             await this._loadPath(matchedPath);
         }
-        catch (e) {
-            return await this.app.handleError(e);
+        catch (error) {
+            await this.app.handleError(error);
         }
     };
     _loadPath = async (matchedPath) => {
         this._emitRouteEvent(routeEventsEnum.START);
-        const renderSequence = [];
         await this._renderLayout(matchedPath.layout);
         const layout = this.app.querySelector(matchedPath.layout.tagName);
+        if (!layout) {
+            throw new Error(`Failed to render layout '${matchedPath.layout.tagName}'.`);
+        }
         await layout.initComplete;
-        const handlersArray = Object.entries(matchedPath.handlers);
-        for (const [index, [target, handler]] of handlersArray.entries()) {
-            const targetContainer = this.app.querySelector(target);
-            if (!targetContainer) {
-                throw new Error(`Failed to get target (${target}) container for handler (${handler})`);
-            }
-            const existingElement = targetContainer.querySelector(handler.tagName);
-            if (existingElement && (handlersArray.length != 1 || index < handlersArray.length - 1)) {
-                continue;
-            }
-            const hashId = this.app.generateHash();
-            this.app.originalInnerHTML.call(targetContainer, handler.generate(hashId, matchedPath.args?.[handler.tagName]));
-            const generatedHandler = this.app.querySelector(`[data-hash-id="${hashId}"]`);
-            if (generatedHandler) {
-                await generatedHandler.initComplete;
-            }
-            renderSequence.push([target, hashId, handler]);
+        const targetContainer = this.app.querySelector(matchedPath.target);
+        if (!targetContainer) {
+            throw new Error(`Failed to find route target '${matchedPath.target}'.`);
+        }
+        const hashId = this.app.generateHash();
+        this.app.originalInnerHTML.call(targetContainer, matchedPath.handler.generate(hashId, matchedPath.args));
+        const generatedHandler = this.app.querySelector(`[data-hash-id="${hashId}"]`);
+        if (generatedHandler) {
+            await generatedHandler.initComplete;
         }
         this._setTitle(matchedPath.title);
-        this.currentRoute = {
-            ...matchedPath,
-        };
+        this.currentRoute = matchedPath;
         this._emitRouteEvent(routeEventsEnum.FINISHED);
     };
     _renderLayout = async (layout) => {
-        if (!this.app.querySelector(layout.tagName)) {
-            this.app.container.innerHTML = layout.generate();
-            const layoutElement = this.app.querySelector(layout.tagName);
-            await layoutElement.initComplete;
-            this._emitRouteEvent(routeEventsEnum.LAYOUT_CHANGE_FINISHED);
-        }
-    };
-    _setTitle = (title) => {
-        let titleElement = document.head.querySelector("title");
-        if (!titleElement) {
-            titleElement = document.createElement("title");
-            document.head.insertAdjacentElement("afterbegin", titleElement);
-        }
-        if (title == null) {
-            titleElement.innerText = this.app.appName;
+        if (this.app.querySelector(layout.tagName)) {
             return;
         }
-        titleElement.innerText = title;
+        this.app.originalInnerHTML.call(this.app.container, layout.generate());
+        const layoutElement = this.app.querySelector(layout.tagName);
+        if (!layoutElement) {
+            throw new Error(`Failed to generate layout '${layout.tagName}'.`);
+        }
+        await layoutElement.initComplete;
+        this._emitRouteEvent(routeEventsEnum.LAYOUT_CHANGE_FINISHED);
     };
-    _emitRouteEvent = (eventType) => {
-        const customEvent = new CustomEvent(routeEventsEnum.FINISHED, {
+    _setTitle(title) {
+        let titleElement = document.head.querySelector("title");
+        if (!titleElement) {
+            titleElement =
+                document.createElement("title");
+            document.head.prepend(titleElement);
+        }
+        titleElement.innerText =
+            title ?? this.app.appName;
+    }
+    _emitRouteEvent(eventType) {
+        this.app.container.dispatchEvent(new CustomEvent(eventType, {
             bubbles: true,
             cancelable: true,
-        });
-        this.app.container.dispatchEvent(customEvent);
-    };
+        }));
+    }
     _matchRoute(path) {
         const normalizedPath = this._normalizePath(path);
         for (const [routePattern, config] of this._routesMap) {
@@ -329,21 +341,20 @@ class Router {
             const regexPath = escapedPattern.replace(/<(str|int):([A-Za-z_]\w*)>/g, (_placeholder, type, parameterName) => {
                 parameterNames.push(parameterName);
                 parameterTypes.push(type);
-                switch (type) {
-                    case "str": return "([^/]+)";
-                    case "int": return "(\\d+)";
-                    default: {
-                        const unsupportedType = type;
-                        throw new UnsupportedRouteParameterType(unsupportedType);
-                    }
+                if (type === "str") {
+                    return "([^/]+)";
                 }
+                if (type === "int") {
+                    return "(\\d+)";
+                }
+                throw new UnsupportedRouteParameterType(type);
             });
             const match = normalizedPath.match(new RegExp(`^${regexPath}$`));
             if (!match) {
                 continue;
             }
             const parameters = {};
-            for (let index = 0; index < parameterNames.length; index++) {
+            for (let index = 0; index < parameterNames.length; index += 1) {
                 const parameterName = parameterNames[index];
                 const parameterType = parameterTypes[index];
                 const capturedValue = match[index + 1];
@@ -368,31 +379,31 @@ class Router {
         this._routeParameters = {};
         throw new RouteNotFoundError(normalizedPath);
     }
+    async redirect(path) {
+        if (typeof path !== "string" ||
+            path.trim().length === 0) {
+            throw new TypeError("Redirect path must be a non-empty string.");
+        }
+        await this._handleLinkPress(path);
+    }
     _handleLinkPress = async (href) => {
-        const state = this._getCurrentState();
-        try {
-            await this.route();
-            history.pushState(state, "", href);
-        }
-        catch (e) {
-            await this.app.handleError(e);
-        }
+        const destination = new URL(href, location.href);
+        history.pushState(this._getCurrentState(), "", `${destination.pathname}${destination.search}${destination.hash}`);
+        await this.route();
     };
-    _getCurrentState = () => {
-        const state = {
+    _getCurrentState() {
+        return {
             scrollPosition: {
                 x: window.scrollX,
-                y: window.scrollY
-            }
+                y: window.scrollY,
+            },
         };
-        return state;
-    };
-    urlIsCurrentPath = (href) => {
-        let modifiedHref = href.replace(this.origin, "");
-        modifiedHref = href.replace(this._baseUrl, "");
-        modifiedHref = href.split("?", 2).length > 0 ? href.split("?", 2)[0] : null;
-        return href == this.currentRoute?.route;
-    };
+    }
+    urlIsCurrentPath(href) {
+        const url = new URL(href, location.href);
+        const path = this._normalizePath(url.pathname.replace(this.baseUrl, ""));
+        return path === this.currentRoute?.route;
+    }
     get routeParameters() {
         return this._routeParameters;
     }

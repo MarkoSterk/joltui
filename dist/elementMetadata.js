@@ -1,0 +1,165 @@
+const elementMetadata = new WeakMap();
+const customElementNamePattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/;
+function assertClassDecorator(context) {
+    if (context.kind !== "class") {
+        throw new TypeError("Element decorators can only decorate classes.");
+    }
+}
+function assertComponentConfigs(configs) {
+    if (!configs ||
+        typeof configs !== "object") {
+        throw new TypeError("Component configuration is required.");
+    }
+    if (typeof configs.tagName !== "string" ||
+        !customElementNamePattern.test(configs.tagName)) {
+        throw new TypeError(`Invalid custom element tag name ` +
+            `'${String(configs.tagName)}'.`);
+    }
+    assertOptionalName(configs.dataField, "dataField");
+    assertOptionalName(configs.groupName, "groupName");
+    if (configs.useServer !== undefined &&
+        configs.useServer !== null &&
+        typeof configs.useServer !== "boolean") {
+        throw new TypeError("useServer must be a boolean, null, or undefined.");
+    }
+}
+function assertOptionalName(value, propertyName) {
+    if (value !== undefined &&
+        value !== null &&
+        (typeof value !== "string" ||
+            value.trim().length === 0)) {
+        throw new TypeError(`${propertyName} must be a non-empty ` +
+            `string, null, or undefined.`);
+    }
+}
+function assertPageConfigs(configs) {
+    if (!configs ||
+        typeof configs !== "object") {
+        throw new TypeError("Page configuration is required.");
+    }
+    if (typeof configs.path !== "string" ||
+        configs.path.trim().length === 0 ||
+        !configs.path.startsWith("/")) {
+        throw new TypeError("Page path must be a non-empty string " +
+            "starting with '/'.");
+    }
+    assertOptionalName(configs.title, "title");
+    assertOptionalName(configs.target, "target");
+    if (configs.extras !== undefined &&
+        configs.extras !== null &&
+        (typeof configs.extras !== "object" ||
+            Array.isArray(configs.extras))) {
+        throw new TypeError("Page extras must be an object, null, or undefined.");
+    }
+}
+function defineTagName(elementClass, tagName) {
+    Object.defineProperty(elementClass, "tagName", {
+        configurable: false,
+        enumerable: true,
+        writable: false,
+        value: tagName,
+    });
+}
+function setElementMetadata(elementClass, metadata) {
+    elementMetadata.set(elementClass, Object.freeze(metadata));
+}
+export function setPageAuthenticationMetadata(elementClass, authentication) {
+    const metadata = elementMetadata.get(elementClass);
+    if (!metadata || metadata.kind !== "page") {
+        throw new TypeError("@auth requires @page to be applied below it.");
+    }
+    setElementMetadata(elementClass, {
+        ...metadata,
+        authentication: {
+            authenticationRequired: authentication.authenticationRequired,
+            rolesRequired: [
+                ...authentication.rolesRequired,
+            ],
+        },
+    });
+}
+function requireComponentMetadata(elementClass, decoratorName) {
+    const metadata = elementMetadata.get(elementClass);
+    if (!metadata) {
+        throw new TypeError(`@${decoratorName} requires @component ` +
+            `to be applied below it.`);
+    }
+    if (metadata.kind !== "component") {
+        throw new TypeError(`@${decoratorName} cannot be applied to ` +
+            `an element already decorated as ` +
+            `'${metadata.kind}'.`);
+    }
+    return metadata;
+}
+export function component(configs) {
+    assertComponentConfigs(configs);
+    return function componentDecorator(elementClass, context) {
+        assertClassDecorator(context);
+        if (elementMetadata.has(elementClass)) {
+            throw new TypeError(`Element '${context.name ?? configs.tagName}' ` +
+                `already has component metadata.`);
+        }
+        defineTagName(elementClass, configs.tagName);
+        setElementMetadata(elementClass, {
+            kind: "component",
+            tagName: configs.tagName,
+            dataField: configs.dataField ?? null,
+            groupName: configs.groupName ?? null,
+            useServer: configs.useServer ?? null,
+        });
+    };
+}
+export function page(pathOrConfigs) {
+    const configs = typeof pathOrConfigs === "string"
+        ? { path: pathOrConfigs }
+        : pathOrConfigs;
+    assertPageConfigs(configs);
+    return function pageDecorator(elementClass, context) {
+        assertClassDecorator(context);
+        const componentMetadata = requireComponentMetadata(elementClass, "page");
+        const authentication = configs.authentication
+            ? {
+                authenticationRequired: configs.authentication
+                    .authenticationRequired,
+                rolesRequired: [
+                    ...configs.authentication
+                        .rolesRequired,
+                ],
+            }
+            : null;
+        setElementMetadata(elementClass, {
+            ...componentMetadata,
+            kind: "page",
+            path: configs.path,
+            layout: configs.layout ?? null,
+            title: configs.title ?? null,
+            target: configs.target ?? null,
+            extras: Object.freeze({
+                ...(configs.extras ?? {}),
+            }),
+            authentication,
+            roles: configs.roles
+                ? [...configs.roles]
+                : null,
+        });
+    };
+}
+export function layout(elementClass, context) {
+    assertClassDecorator(context);
+    const componentMetadata = requireComponentMetadata(elementClass, "layout");
+    setElementMetadata(elementClass, {
+        ...componentMetadata,
+        kind: "layout",
+    });
+}
+export function getElementMetadata(elementClass) {
+    return elementMetadata.get(elementClass) ?? null;
+}
+export function requireElementMetadata(elementClass) {
+    const metadata = getElementMetadata(elementClass);
+    if (!metadata) {
+        throw new TypeError(`Element '${elementClass.name}' must use @component.`);
+    }
+    return metadata;
+}
+//# sourceMappingURL=elementMetadata.js.map

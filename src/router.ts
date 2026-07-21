@@ -9,6 +9,7 @@ import {
     type PageMetadata,
 } from "./elementMetadata.js";
 import { NotImplementedError } from "./utilities.js";
+import { AuthenticationError, AuthorizationError } from "./auth.js";
 
 export const routeEventsEnum = {
     START: "route-change.start",
@@ -73,35 +74,6 @@ export class UnsupportedRouteParameterType extends Error {
     }
 }
 
-export class AuthenticationError extends Error {
-    protected readonly path: string;
-
-    constructor(
-        path: string,
-        options?: ErrorOptions,
-    ) {
-        super("User not authenticated", options);
-        this.path = path;
-        this.name = "AuthenticationError";
-    }
-}
-
-export class AuthorizationError extends Error {
-    protected readonly path: string;
-    protected readonly roles: unknown[];
-
-    constructor(
-        path: string,
-        roles: unknown[],
-        options?: ErrorOptions,
-    ) {
-        super("User is not authorized for this route", options);
-        this.path = path;
-        this.roles = roles;
-        this.name = "AuthorizationError";
-    }
-}
-
 export type RouteParameters = Record<
     string,
     string | number
@@ -112,16 +84,7 @@ export type Authentication = {
     rolesRequired: unknown[];
 };
 
-export type RouteHandlers<
-    TApp extends App = App,
-> = Record<string, CustomElementClass<TApp>>;
-
 export type HandlerArgs = Record<string, unknown>;
-
-export type RouteHandlerArgs = Record<
-    string,
-    HandlerArgs
->;
 
 export type RouteExtras = Record<string, unknown>;
 
@@ -141,12 +104,13 @@ export type Route<
 export type ParsedRoute<
     TApp extends App = App,
 > = {
-    handlers: RouteHandlers<TApp>;
+    handler: CustomElementClass<TApp>;
+    target: string;
     layout: CustomElementClass<TApp>;
     title: string | null;
     extras: RouteExtras;
     authentication: Authentication | null;
-    args: RouteHandlerArgs | null;
+    args: HandlerArgs | null;
     roles: unknown[] | null;
     route: string;
 };
@@ -374,10 +338,8 @@ class Router<TApp extends App> {
             routeMap.set(
                 route.path,
                 {
-                    handlers: {
-                        [route.target]:
-                            route.handler,
-                    },
+                    handler: route.handler,
+                    target: route.target,
                     layout: route.layout,
                     title: route.title,
                     extras: route.extras,
@@ -612,58 +574,34 @@ class Router<TApp extends App> {
 
         await layout.initComplete;
 
-        const handlers = Object.entries(
-            matchedPath.handlers,
-        );
-
-        for (
-            const [index, [target, handler]]
-            of handlers.entries()
-        ) {
-            const targetContainer =
-                this.app.querySelector(target);
-
-            if (!targetContainer) {
-                throw new Error(
-                    `Failed to find route target '${target}'.`,
-                );
-            }
-
-            const existingElement =
-                targetContainer.querySelector(
-                    handler.tagName,
-                );
-
-            if (
-                existingElement &&
-                (
-                    handlers.length !== 1 ||
-                    index < handlers.length - 1
-                )
-            ) {
-                continue;
-            }
-
-            const hashId = this.app.generateHash();
-            const handlerArgs =
-                matchedPath.args?.[handler.tagName];
-
-            this.app.originalInnerHTML.call(
-                targetContainer,
-                handler.generate(
-                    hashId,
-                    handlerArgs ?? null,
-                ),
+        const targetContainer =
+            this.app.querySelector(
+                matchedPath.target,
             );
 
-            const generatedHandler =
-                this.app.querySelector(
-                    `[data-hash-id="${hashId}"]`,
-                ) as CustomElement<TApp> | null;
+        if (!targetContainer) {
+            throw new Error(
+                `Failed to find route target '${matchedPath.target}'.`,
+            );
+        }
 
-            if (generatedHandler) {
-                await generatedHandler.initComplete;
-            }
+        const hashId = this.app.generateHash();
+
+        this.app.originalInnerHTML.call(
+            targetContainer,
+            matchedPath.handler.generate(
+                hashId,
+                matchedPath.args,
+            ),
+        );
+
+        const generatedHandler =
+            this.app.querySelector(
+                `[data-hash-id="${hashId}"]`,
+            ) as CustomElement<TApp> | null;
+
+        if (generatedHandler) {
+            await generatedHandler.initComplete;
         }
 
         this._setTitle(matchedPath.title);

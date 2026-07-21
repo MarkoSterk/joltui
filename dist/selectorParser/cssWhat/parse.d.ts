@@ -5,7 +5,7 @@
  *
  * @param selector Selector to check.
  */
-export declare function isTraversal(selector: any): boolean;
+export function isTraversal(selector: any): boolean;
 /**
  * Parses `selector`, optionally with the passed `options`.
  *
@@ -15,5 +15,5 @@ export declare function isTraversal(selector: any): boolean;
  * The first dimension represents selectors separated by commas (eg. `sub1, sub2`),
  * the second contains the relevant tokens for that selector.
  */
-export declare function parse(selector: any): any[];
+export function parse(selector: any): any[];
 //# sourceMappingURL=parse.d.ts.map

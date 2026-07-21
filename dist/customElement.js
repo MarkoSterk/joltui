@@ -1,5 +1,8 @@
 import App, { dataEventEnum, } from "./app.js";
 import doT, {} from "./dotjs/dot.js";
+import { Lifecycle, getLifecycleMethods, } from "./lifecycle.js";
+import { requireElementMetadata, } from "./elementMetadata.js";
+import { AuthenticationError, AuthorizationError, InternalServerError, NetworkError } from "./errors.js";
 export class RenderError extends Error {
     elementName;
     constructor(elementName) {
@@ -27,12 +30,20 @@ export class DotJSEngineError extends Error {
 export class MethodExecutionError extends Error {
     methodName;
     elementName;
-    constructor(methodName, elementName) {
+    constructor(methodName, elementName, options) {
         super(`Failed to execute method '${methodName}' ` +
-            `on element '${elementName}'`);
+            `on element '${elementName}'`, options);
         this.name = "MethodExecutionError";
         this.methodName = methodName;
         this.elementName = elementName;
+    }
+}
+export class MarkupFetchError extends Error {
+    elementName;
+    constructor(msg, tagName) {
+        super(msg);
+        this.elementName = tagName;
+        this.name = "MarkupFetchError";
     }
 }
 const baseTemplateSettings = Object.freeze({
@@ -59,101 +70,18 @@ function createTemplateSettings() {
 export function randomId(max = 10000, min = 1) {
     return (Math.floor(Math.random() * (max - min + 1)) + min);
 }
-export function defineValue(initValue, triggerRerender = true) {
-    return function defineValueInner(name) {
-        const clonedValue = window.structuredClone(initValue);
-        if (clonedValue !== undefined &&
-            clonedValue !== null) {
-            this._values[name] = clonedValue;
-        }
-        return {
-            configurable: true,
-            enumerable: true,
-            get() {
-                return this._values[name];
-            },
-            set(value) {
-                this._values[name] = value;
-                if (triggerRerender) {
-                    this._refreshBoundElements(name);
-                }
-            },
-        };
-    };
-}
-export function queryParameter(name, defaultValue = null, triggerRerender = true) {
-    if (!name) {
-        throw new Error("Missing or invalid query parameter name");
-    }
-    return function queryParameterInner() {
-        return {
-            configurable: true,
-            enumerable: true,
-            get() {
-                return (this.app.queryParameters[name] ??
-                    defaultValue);
-            },
-            set(value) {
-                this.app.updateQueryParameters({ [name]: `${value}` });
-                if (triggerRerender) {
-                    this._refreshBoundElements(`query-${name}`);
-                }
-            },
-        };
-    };
-}
-export function querySelector(selector) {
-    if (!selector) {
-        throw new Error("Missing or invalid selector for querySelector");
-    }
-    return function querySelectorInner() {
-        return {
-            configurable: true,
-            enumerable: true,
-            get() {
-                return this.querySelector(selector);
-            },
-        };
-    };
-}
-export function querySelectorAll(selector) {
-    if (!selector) {
-        throw new Error("Missing or invalid selector for querySelectorAll");
-    }
-    return function querySelectorAllInner() {
-        return {
-            configurable: true,
-            enumerable: true,
-            get() {
-                return this.querySelectorAll(selector);
-            },
-        };
-    };
-}
 export const html = String.raw;
 export class CustomElement extends HTMLElement {
     static tagName = "";
     _app = null;
     _resolveInitialization = null;
     _templateSettings = createTemplateSettings();
-    _dataField = null;
     _parent = null;
-    _protectedProperties = [];
-    _methods = {};
-    _beforeInit = {};
-    _beforeInitResolve = {};
-    _afterInit = {};
-    _beforeRerender = {};
-    _afterRerender = {};
-    _afterDisconnect = {};
-    _define = {};
-    _templateFunctions = {};
     _renderTime = 0;
     _lastRender = 0;
     _abort = false;
     _virtualRenderDiv = "virtual-render-div";
     initComplete;
-    _values = {};
     rndId;
     hashId = "";
     markup = function () {
@@ -167,18 +95,7 @@ export class CustomElement extends HTMLElement {
         });
     }
     async connectedCallback() {
-        const deferValue = this.getAttribute("defer");
-        const dataDeferValue = this.getAttribute("data-jolt-defer");
-        const deferValues = [
-            "",
-            "true",
-            "defer",
-        ];
-        const deferred = (this.hasAttribute("defer") &&
-            deferValues.includes(deferValue ?? "")) ||
-            (this.hasAttribute("data-jolt-defer") &&
-                deferValues.includes(dataDeferValue ?? ""));
-        if (deferred) {
+        if (this.hasAttribute("defer")) {
             this._resolveInitComplete();
             return;
         }
@@ -190,10 +107,10 @@ export class CustomElement extends HTMLElement {
         }
         this._abort = true;
         this.app.removeEventListener(dataEventEnum.CHANGE, this._updateBoundAppDataParts);
-        if (this._dataField) {
+        if (this.dataField) {
             this.app.removeDataListener(this);
         }
-        void this._runMethods(this._afterDisconnect);
+        void this._runLifecycle(Lifecycle.AFTER_DISCONNECT);
     }
     initElement = async () => {
         try {
@@ -219,19 +136,11 @@ export class CustomElement extends HTMLElement {
                     this._parent = parent;
                 }
             }
-            this._dataField =
-                this.getAttribute("data-field") ??
-                    this._dataField;
             this._templateSettings =
                 createTemplateSettings();
-            this._assignTemplateFunctions();
-            this._protectedProperties =
-                Object.getOwnPropertyNames(this);
-            this._assignMethods();
-            this._assignDefinedGettersAndSetters();
-            await this._runMethods(this._beforeInit);
+            await this._runLifecycle(Lifecycle.BEFORE_INIT);
             this.app.addEventListener(dataEventEnum.CHANGE, this._updateBoundAppDataParts);
-            if (this._dataField) {
+            if (this.dataField) {
                 this.app.registerDataListener(this);
             }
             await this.render();
@@ -240,9 +149,9 @@ export class CustomElement extends HTMLElement {
                 return;
             }
             await this._waitForSubelements();
-            await this._runMethods(this._beforeInitResolve);
+            await this._runLifecycle(Lifecycle.BEFORE_INIT_RESOLVE);
             this._resolveInitComplete();
-            await this._runMethods(this._afterInit);
+            await this._runLifecycle(Lifecycle.AFTER_INIT);
         }
         catch (error) {
             this._abort = true;
@@ -261,52 +170,13 @@ export class CustomElement extends HTMLElement {
         }
         console.error(error);
     }
-    _assignTemplateFunctions() {
-        for (const [name, templateFunction,] of Object.entries(this._templateFunctions)) {
-            this._templateSettings.def[name] =
-                templateFunction.bind(this);
-        }
-    }
-    _assignMethods() {
-        if (!this._methods) {
-            return;
-        }
-        for (const [name, method] of Object.entries(this._methods)) {
-            this._assertPublicMemberName(name, "method");
-            Object.defineProperty(this, name, {
-                configurable: true,
-                enumerable: false,
-                writable: true,
-                value: method.bind(this),
-            });
-        }
-        this._methods = null;
-    }
-    _assignDefinedGettersAndSetters() {
-        for (const [propertyName, definition,] of Object.entries(this._define)) {
-            this._assertPublicMemberName(propertyName, "property");
-            const descriptor = typeof definition === "function"
-                ? definition.call(this, propertyName)
-                : definition;
-            Object.defineProperty(this, propertyName, descriptor);
-        }
-    }
-    _assertPublicMemberName(name, memberType) {
-        if (this._protectedProperties.includes(name) ||
-            name.startsWith("_") ||
-            name.startsWith("#")) {
-            throw new Error(`Illegal or protected ${memberType} ` +
-                `name '${name}' on element ` +
-                `'${this.tagName}'`);
-        }
-    }
-    async _runMethods(methods) {
-        for (const [name, method] of Object.entries(methods)) {
+    async _runLifecycle(stage) {
+        for (const { name, method } of getLifecycleMethods(this, stage)) {
             try {
                 await method.call(this);
             }
-            catch {
-                throw new MethodExecutionError(name, this.tagName);
+            catch (error) {
+                throw new MethodExecutionError(name, this.tagName, { cause: error });
             }
         }
     }
@@ -324,7 +194,7 @@ export class CustomElement extends HTMLElement {
     }
     render = async () => {
         try {
-            const renderedHtml = await this._markup();
+            const renderedHtml = this.useServer ? await this.fetchHTML() : await this._markup();
             this.innerHTML = renderedHtml;
         }
         catch (error) {
@@ -332,15 +202,54 @@ export class CustomElement extends HTMLElement {
             await this._handleError(error);
         }
     };
+    fetchHTML = async () => {
+        if (!this.app.serverComponentsUrl) {
+            throw new Error("If using server components you need to provide the 'serverComponentsUrl' property at application initialization.");
+        }
+        try {
+            let response = await fetch(this.app.serverComponentsUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    tagName: this.tagName.toLowerCase(),
+                    groupName: this.groupName == null ? "default" : this.groupName,
+                    queryParameters: this.app.queryParameters || {},
+                    routeParameters: this.app?.router.routeParameters || {}
+                })
+            });
+            if (!response.ok) {
+                if (response.status == 401) {
+                    throw new AuthenticationError("Missing authentication for requested route");
+                }
+                if (response.status == 403) {
+                    throw new AuthorizationError("User is not authorized for this route", []);
+                }
+                if (response.status == 500) {
+                    throw new InternalServerError("Something went wrong on the server during component content fetch");
+                }
+            }
+            try {
+                return await response.text();
+            }
+            catch (e) {
+                throw new MarkupFetchError("Failed to parse fetched html markup.", this.tagName);
+            }
+        }
+        catch (e) {
+            throw new NetworkError("Failed to fetch requested content. Server unresponsive.");
+        }
+    };
     rerender = async () => {
         this._templateSettings.dataBinds.clear();
-        await this._runMethods(this._beforeRerender);
+        await this._runLifecycle(Lifecycle.BEFORE_RERENDER);
         await this.render();
         if (this._abort) {
             return;
         }
         await this._waitForSubelements();
-        await this._runMethods(this._afterRerender);
+        await this._runLifecycle(Lifecycle.AFTER_RERENDER);
     };
     async _waitForSubelements() {
         const customElements = Array.from(this.querySelectorAll("*")).filter((element) => element instanceof CustomElement);
@@ -353,6 +262,12 @@ export class CustomElement extends HTMLElement {
         const customEvent = event;
         this._refreshBoundElements(`app.${customEvent.detail.field}`);
     };
+    invalidate(bindingName) {
+        if (!bindingName) {
+            throw new TypeError("Binding name cannot be empty.");
+        }
+        this._refreshBoundElements(bindingName);
+    }
     _refreshBoundElements(propertyName) {
         this._renderTime = Date.now();
         const templates = this._templateSettings.dataBinds.get(propertyName);
@@ -396,8 +311,8 @@ export class CustomElement extends HTMLElement {
         }
     }
     _createEventListenerMethod(element, methodName) {
-        return (event) => {
-            void this._executeElementMethod(element, methodName, event);
+        return async (event) => {
+            await this._executeElementMethod(element, methodName, event);
         };
     }
     async _executeElementMethod(element, methodName, event) {
@@ -412,10 +327,10 @@ export class CustomElement extends HTMLElement {
             }
             const boundMethod = method;
             if (Object.keys(args).length > 0) {
-                await boundMethod.call(this, element, event, args);
+                await boundMethod.call(this, event, args);
             }
             else {
-                await boundMethod.call(this, element, event);
+                await boundMethod.call(this, event);
             }
         }
         catch (error) {
@@ -513,6 +428,9 @@ export class CustomElement extends HTMLElement {
     setData(field, data) {
         this.app.setData(field, data);
     }
+    get data() {
+        return this.app.data;
+    }
     get lastRender() {
         return this._lastRender;
     }
@@ -523,8 +441,17 @@ export class CustomElement extends HTMLElement {
         }
         return this._app;
     }
+    get metadata() {
+        return requireElementMetadata(this.constructor);
+    }
     get dataField() {
-        return this._dataField;
+        return this.metadata.dataField;
+    }
+    get groupName() {
+        return this.metadata.groupName;
+    }
+    get useServer() {
+        return this.metadata.useServer;
     }
     get parent() {
         return this._parent;
@@ -566,54 +493,5 @@ export function escapeHtmlAttribute(value) {
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;");
 }
-const validCustomElementTagName = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/;
-export function ElementFactory(config) {
-    const { tagName, markup, methods = {}, beforeInit = {}, beforeInitResolve = {}, afterInit = {}, beforeRerender = {}, afterRerender = {}, afterDisconnect = {}, dataField = null, define = {}, templateFunctions = {}, } = config;
-    if (!tagName) {
-        throw new Error("Missing tagName in ElementFactory");
-    }
-    if (typeof markup !== "function") {
-        throw new Error(`Missing or invalid markup method ` +
-            `for element '${tagName}'`);
-    }
-    if (!validCustomElementTagName.test(tagName)) {
-        throw new Error(`Element tagName '${tagName}' must ` +
-            `use valid custom-element kebab-case ` +
-            `syntax and contain at least one hyphen`);
-    }
-    class GeneratedCustomElement extends CustomElement {
-        static tagName = tagName;
-        _methods = {
-            ...methods,
-        };
-        _beforeInit = {
-            ...beforeInit,
-        };
-        _beforeInitResolve = {
-            ...beforeInitResolve,
-        };
-        _afterInit = {
-            ...afterInit,
-        };
-        _beforeRerender = {
-            ...beforeRerender,
-        };
-        _afterRerender = {
-            ...afterRerender,
-        };
-        _afterDisconnect = {
-            ...afterDisconnect,
-        };
-        _dataField = dataField;
-        _define = {
-            ...define,
-        };
-        _templateFunctions = {
-            ...templateFunctions,
-        };
-        markup = markup;
-    }
-    return GeneratedCustomElement;
-}
-export default ElementFactory;
+export default CustomElement;
 //# sourceMappingURL=customElement.js.map
