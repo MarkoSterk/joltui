@@ -15,6 +15,7 @@ import {
 
 export const dataEventEnum = {
     CHANGE: "app-data-change",
+    QUERY_CHANGE: "query-parameter-change",
 } as const;
 
 export type AppDataChangeDetail = {
@@ -24,9 +25,17 @@ export type AppDataChangeDetail = {
 export type AppDataChangeEvent =
     CustomEvent<AppDataChangeDetail>;
 
+export type AppQueryChangeDetail = {
+    field: string;
+};
+
+export type AppQueryChangeEvent =
+    CustomEvent<AppQueryChangeDetail>;
+
 interface AppEventMap
     extends GlobalEventHandlersEventMap {
     "app-data-change": AppDataChangeEvent;
+    "query-parameter-change": AppQueryChangeEvent;
 }
 
 type AppEventListener<
@@ -57,12 +66,95 @@ export type AppConfig<
     serverComponentsUrl?: string | null;
     dataStructure?: DataStructure | null;
     container?: AppContainer<TApp> | null;
+    templatesCacheDuration?: number | null;
+    templatesCacheCleanupInterval?: number | null;
 };
 
 type ElementHtmlSetter = (
     this: Element,
     value: string,
 ) => void;
+
+type TemplatesCacheEntry = {
+    template: string;
+    duration: number;
+    setTime: number;
+};
+
+function assertCacheDuration(
+    value: number,
+    propertyName: string,
+): void {
+    if (
+        typeof value !== "number" ||
+        !Number.isFinite(value) ||
+        value < 0
+    ) {
+        throw new TypeError(
+            `${propertyName} must be a finite, non-negative number.`,
+        );
+    }
+}
+
+function stableSerialize(
+    value: unknown,
+    seen: WeakSet<object> = new WeakSet(),
+): string {
+    if (value === null) {
+        return "null";
+    }
+
+    if (typeof value === "number" && !Number.isFinite(value)) {
+        return JSON.stringify({
+            type: "number",
+            value: String(value),
+        });
+    }
+
+    if (typeof value === "bigint") {
+        return JSON.stringify({
+            type: "bigint",
+            value: value.toString(),
+        });
+    }
+
+    if (typeof value !== "object") {
+        return JSON.stringify(
+            value === undefined
+                ? { type: "undefined" }
+                : value,
+        ) ?? String(value);
+    }
+
+    if (value instanceof Date) {
+        return JSON.stringify({
+            type: "date",
+            value: value.toISOString(),
+        });
+    }
+
+    if (seen.has(value)) {
+        throw new TypeError(
+            "Template cache key values cannot contain circular references.",
+        );
+    }
+
+    seen.add(value);
+
+    const serialized = Array.isArray(value)
+        ? `[${value.map(item => stableSerialize(item, seen)).join(",")}]`
+        : `{${Object.entries(value)
+            .sort(([first], [second]) =>
+                first.localeCompare(second),
+            )
+            .map(([key, item]) =>
+                `${JSON.stringify(key)}:${stableSerialize(item, seen)}`,
+            )
+            .join(",")}}`;
+
+    seen.delete(value);
+    return serialized;
+}
 
 class App<
     TApp extends App<TApp> = any,
@@ -123,11 +215,26 @@ class App<
     protected readonly _originalElQSA:
         typeof Element.prototype.querySelectorAll;
 
+    protected readonly _templatesCache:
+        Map<string, TemplatesCacheEntry>;
+
+    protected readonly _pendingTemplateCache:
+        Map<string, Promise<string>> = new Map();
+
+    protected _templatesCacheDefaultDuration: number = 300;
+
+    protected _templatesCacheCleanupInterval: number = 60;
+
+    protected _templatesCacheCleanupTimer:
+        ReturnType<typeof globalThis.setInterval> | null = null;
+
     constructor({
         appName,
         serverComponentsUrl = null,
         dataStructure = null,
         container = null,
+        templatesCacheDuration = null,
+        templatesCacheCleanupInterval = null,
     }: AppConfig<TApp>) {
         if (
             typeof appName !== "string" ||
@@ -139,6 +246,22 @@ class App<
         }
 
         this._appName = appName;
+        if (templatesCacheDuration !== null) {
+            assertCacheDuration(
+                templatesCacheDuration,
+                "templatesCacheDuration",
+            );
+            this._templatesCacheDefaultDuration = templatesCacheDuration;
+        }
+
+        if (templatesCacheCleanupInterval !== null) {
+            assertCacheDuration(
+                templatesCacheCleanupInterval,
+                "templatesCacheCleanupInterval",
+            );
+            this._templatesCacheCleanupInterval =
+                templatesCacheCleanupInterval;
+        }
 
         if (serverComponentsUrl !== null) {
             this.serverComponentsUrl =
@@ -189,6 +312,8 @@ class App<
 
         this._originalElQSA =
             Element.prototype.querySelectorAll;
+
+        this._templatesCache = new Map<string, TemplatesCacheEntry>;
     }
 
     init = async (
@@ -203,6 +328,8 @@ class App<
             "app-id",
             this.generateHash(),
         );
+
+        this._startTemplatesCacheCleanup();
 
         this.registerCustomElements(
             this.elements,
@@ -834,6 +961,67 @@ class App<
         );
     }
 
+    protected _queryChangeEvent(
+        field: string,
+    ): void {
+        this.container.dispatchEvent(
+            new CustomEvent<
+                AppQueryChangeDetail
+            >(
+                dataEventEnum.QUERY_CHANGE,
+                {
+                    detail: { field },
+                },
+            ),
+        );
+    }
+
+    protected _getChangedQueryParameterNames(
+        previousParameters: URLSearchParams,
+        currentParameters: URLSearchParams,
+    ): string[] {
+        const parameterNames = new Set([
+            ...previousParameters.keys(),
+            ...currentParameters.keys(),
+        ]);
+        const changedParameterNames: string[] = [];
+
+        for (const parameterName of parameterNames) {
+            const previousValues =
+                previousParameters.getAll(
+                    parameterName,
+                );
+            const currentValues =
+                currentParameters.getAll(
+                    parameterName,
+                );
+
+            if (
+                previousValues.length !==
+                    currentValues.length ||
+                previousValues.some(
+                    (value, index) =>
+                        value !==
+                        currentValues[index],
+                )
+            ) {
+                changedParameterNames.push(
+                    parameterName,
+                );
+            }
+        }
+
+        return changedParameterNames;
+    }
+
+    protected _emitQueryParameterChanges(
+        parameterNames: readonly string[],
+    ): void {
+        for (const parameterName of parameterNames) {
+            this._queryChangeEvent(parameterName);
+        }
+    }
+
     get data():
         ReadonlyMap<string, unknown> {
         return this._dataStructure;
@@ -915,6 +1103,8 @@ class App<
     ) {
         const url =
             new URL(location.href);
+        const previousParameters =
+            new URLSearchParams(url.search);
 
         url.search = "";
 
@@ -928,36 +1118,71 @@ class App<
             );
         }
 
-        history.pushState(
-            history.state,
-            "",
-            url,
-        );
-    }
-
-    updateQueryParameters(
-        params: Record<
-            string,
-            string | number
-        >,
-    ): void {
-        const url =
-            new URL(location.href);
-
-        for (
-            const [key, value]
-            of Object.entries(params)
-        ) {
-            url.searchParams.set(
-                key,
-                String(value),
+        const changedParameterNames =
+            this._getChangedQueryParameterNames(
+                previousParameters,
+                url.searchParams,
             );
+
+        if (changedParameterNames.length === 0) {
+            return;
         }
 
         history.pushState(
             history.state,
             "",
             url,
+        );
+
+        this._emitQueryParameterChanges(
+            changedParameterNames,
+        );
+    }
+
+    updateQueryParameters(
+        params: Record<
+            string,
+            string | number | null
+        >,
+    ): void {
+        const url =
+            new URL(location.href);
+        const previousParameters =
+            new URLSearchParams(url.search);
+
+        for (
+            const [key, value]
+            of Object.entries(params)
+        ) {
+            if (value === null) {
+                url.searchParams.delete(key);
+                continue;
+            }
+
+            url.searchParams.set(
+                key,
+                String(value),
+            );
+        }
+
+        const changedParameterNames =
+            this._getChangedQueryParameterNames(
+                previousParameters,
+                url.searchParams,
+            );
+
+        if (changedParameterNames.length === 0) {
+            return;
+        }
+
+        history.pushState(
+            history.state,
+            "",
+            url,
+        );
+
+        this._emitQueryParameterChanges(
+            changedParameterNames,
         );
     }
 
@@ -983,6 +1208,149 @@ class App<
         return searchParams.toString();
     }
 
+    getTemplateCacheKey(
+        tagName: string,
+        args: Record<string, unknown> = {},
+    ): string {
+        const queryParameters = Array.from(
+            new URLSearchParams(location.search).entries(),
+        ).sort(
+            ([firstKey, firstValue], [secondKey, secondValue]) =>
+                firstKey.localeCompare(secondKey) ||
+                firstValue.localeCompare(secondValue),
+        );
+        const routeParameters =
+            this._router?.routeParameters ?? {};
+
+        return stableSerialize({
+            tagName: tagName.toLowerCase(),
+            routeParameters,
+            queryParameters,
+            args,
+            appData: Object.fromEntries(
+                this._dataStructure,
+            ),
+        });
+    }
+
+    setCachedTemplate(
+        key: string,
+        template: string,
+        duration: number,
+    ): void {
+        assertCacheDuration(duration, "duration");
+
+        if (duration === 0) {
+            this._templatesCache.delete(key);
+            return;
+        }
+
+        this._templatesCache.set(key, {
+            template,
+            duration,
+            setTime: Date.now(),
+        });
+    }
+
+    getCachedTemplate(key: string): string | null {
+        const cache = this._templatesCache.get(key);
+
+        if (!cache) {
+            return null;
+        }
+
+        if (
+            Date.now() - cache.setTime >=
+            cache.duration * 1000
+        ) {
+            this._templatesCache.delete(key);
+            return null;
+        }
+
+        return cache.template;
+    }
+
+    async getOrSetCachedTemplate(
+        key: string,
+        duration: number,
+        templateFactory: () => string | Promise<string>,
+    ): Promise<string> {
+        const cachedTemplate =
+            this.getCachedTemplate(key);
+
+        if (cachedTemplate !== null) {
+            return cachedTemplate;
+        }
+
+        const pendingTemplate =
+            this._pendingTemplateCache.get(key);
+
+        if (pendingTemplate) {
+            return await pendingTemplate;
+        }
+
+        const templatePromise = Promise.resolve()
+            .then(templateFactory)
+            .then(template => {
+                this.setCachedTemplate(
+                    key,
+                    template,
+                    duration,
+                );
+                return template;
+            })
+            .finally(() => {
+                this._pendingTemplateCache.delete(key);
+            });
+
+        this._pendingTemplateCache.set(
+            key,
+            templatePromise,
+        );
+
+        return await templatePromise;
+    }
+
+    removeCachedTemplate(key: string): boolean {
+        return this._templatesCache.delete(key);
+    }
+
+    cleanTemplatesCache = (): number => {
+        const currentTime = Date.now();
+        let removedEntries = 0;
+
+        for (const [key, cache] of this._templatesCache) {
+            if (
+                currentTime - cache.setTime >=
+                cache.duration * 1000
+            ) {
+                this._templatesCache.delete(key);
+                removedEntries++;
+            }
+        }
+
+        return removedEntries;
+    };
+
+    protected _startTemplatesCacheCleanup(): void {
+        if (this._templatesCacheCleanupTimer !== null) {
+            globalThis.clearInterval(
+                this._templatesCacheCleanupTimer,
+            );
+            this._templatesCacheCleanupTimer = null;
+        }
+
+        if (this._templatesCacheCleanupInterval === 0) {
+            return;
+        }
+
+        this._templatesCacheCleanupTimer =
+            globalThis.setInterval(
+                this.cleanTemplatesCache,
+                this._templatesCacheCleanupInterval * 1000,
+            );
+    }
+
     get hash(): string {
         return location.hash;
     }
@@ -1005,6 +1373,33 @@ class App<
 
     get origin(): string {
         return location.origin;
+    }
+
+    get templatesCacheDuration(): number {
+        return this._templatesCacheDefaultDuration;
+    }
+
+    set templatesCacheDuration(duration: number) {
+        assertCacheDuration(
+            duration,
+            "templatesCacheDuration",
+        );
+        this._templatesCacheDefaultDuration = duration;
+    }
+
+    get templatesCacheCleanupInterval(): number {
+        return this._templatesCacheCleanupInterval;
+    }
+
+    set templatesCacheCleanupInterval(
+        interval: number,
+    ) {
+        assertCacheDuration(
+            interval,
+            "templatesCacheCleanupInterval",
+        );
+        this._templatesCacheCleanupInterval = interval;
+        this._startTemplatesCacheCleanup();
     }
 }
 

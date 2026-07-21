@@ -335,6 +335,8 @@ export function queryParam(
     const binding =
         bindingName?.trim() ||
         `query-${normalizedName}`;
+    const queryBinding =
+        `query.${normalizedName}`;
 
     return function <
         THost extends QueryParameterHost,
@@ -387,7 +389,9 @@ export function queryParam(
                             value,
                     });
 
-                this.invalidate(binding);
+                if (binding !== queryBinding) {
+                    this.invalidate(binding);
+                }
             },
         };
     };
@@ -594,4 +598,3 @@ export function selectAll<
         };
     };
 }
-

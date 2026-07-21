@@ -23,15 +23,6 @@ export declare class UnsupportedRouteParameterType extends Error {
     protected readonly type: string;
     constructor(type: string, options?: ErrorOptions);
 }
-export declare class AuthenticationError extends Error {
-    protected readonly path: string;
-    constructor(path: string, options?: ErrorOptions);
-}
-export declare class AuthorizationError extends Error {
-    protected readonly path: string;
-    protected readonly roles: unknown[];
-    constructor(path: string, roles: unknown[], options?: ErrorOptions);
-}
 export type RouteParameters = Record<string, string | number>;
 export type Authentication = {
     authenticationRequired: boolean;
@@ -72,6 +63,10 @@ export type RouterConfig<TApp extends App> = {
     indexRoute?: string;
     app: TApp;
 };
+export type RedirectOptions = {
+    useBaseUrl?: boolean;
+    baseParameters?: RouteParameters;
+};
 type ScrollPosition = {
     x: number;
     y: number;
@@ -87,7 +82,7 @@ declare class Router<TApp extends App> {
     protected readonly _baseUrl: string;
     protected readonly _routes: Route<TApp>[];
     protected readonly _routesMap: Map<string, ParsedRoute<TApp>>;
-    protected _currentRoute: ParsedRoute<TApp> | null;
+    protected _currentRoute: MatchedRoute<TApp> | null;
     protected _routeParameters: RouteParameters;
     protected _inTransition: boolean;
     constructor({ baseUrl, baseLayout, defaultTarget, indexRoute, app, }: RouterConfig<TApp>);
@@ -98,6 +93,7 @@ declare class Router<TApp extends App> {
     protected _parseRoutes(routes: readonly Route<TApp>[]): Map<string, ParsedRoute<TApp>>;
     protected _normalizePath(path: string): string;
     protected _normalizeBaseUrl(baseUrl: string): string;
+    protected _joinBaseUrl(path: string): string;
     protected _sortRoutes(routeMap: Map<string, ParsedRoute<TApp>>): Map<string, ParsedRoute<TApp>>;
     protected _popStateHandler: (event: PopStateEvent) => Promise<void>;
     protected _clickHandler: (event: MouseEvent) => Promise<void>;
@@ -107,7 +103,8 @@ declare class Router<TApp extends App> {
     protected _setTitle(title: string | null): void;
     protected _emitRouteEvent(eventType: string): void;
     protected _matchRoute(path: string): MatchedRoute<TApp>;
-    redirect(path: string): Promise<void>;
+    redirect(path: string, options?: RedirectOptions): Promise<void>;
+    protected _createBaseUrlDestination(path: string, baseParameters: RouteParameters): string;
     protected _handleLinkPress: (href: string) => Promise<void>;
     protected _getCurrentState(): CurrentState;
     urlIsCurrentPath(href: string): boolean;
@@ -121,8 +118,8 @@ declare class Router<TApp extends App> {
     get baseUrl(): string;
     get routes(): Route<TApp>[];
     get routesMap(): ReadonlyMap<string, ParsedRoute<TApp>>;
-    get currentRoute(): ParsedRoute<TApp> | null;
-    set currentRoute(route: ParsedRoute<TApp> | null);
+    get currentRoute(): MatchedRoute<TApp> | null;
+    set currentRoute(route: MatchedRoute<TApp> | null);
     get origin(): string;
     get hash(): string;
     get port(): string;

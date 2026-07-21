@@ -133,6 +133,11 @@ export type RouterConfig<
     app: TApp;
 };
 
+export type RedirectOptions = {
+    useBaseUrl?: boolean;
+    baseParameters?: RouteParameters;
+};
+
 type RouteParameterType = "str" | "int";
 
 type ScrollPosition = {
@@ -167,7 +172,7 @@ class Router<TApp extends App> {
         ParsedRoute<TApp>
     >;
 
-    protected _currentRoute: ParsedRoute<TApp> | null = null;
+    protected _currentRoute: MatchedRoute<TApp> | null = null;
     protected _routeParameters: RouteParameters = {};
     protected _inTransition = false;
 
@@ -211,8 +216,10 @@ class Router<TApp extends App> {
         this._app = app;
         this._baseLayout = baseLayout;
         this._defaultTarget = defaultTarget;
-        this._indexRoute = this._normalizePath(indexRoute);
         this._baseUrl = this._normalizeBaseUrl(baseUrl);
+        this._indexRoute = this._joinBaseUrl(
+            indexRoute,
+        );
         this._routes = this._discoverRoutes();
         this._routesMap = this._parseRoutes(this._routes);
 
@@ -306,7 +313,7 @@ class Router<TApp extends App> {
         }
 
         return {
-            path: this._normalizePath(metadata.path),
+            path: this._joinBaseUrl(metadata.path),
             handler,
             target:
                 metadata.target ??
@@ -385,7 +392,61 @@ class Router<TApp extends App> {
             return "";
         }
 
-        return this._normalizePath(baseUrl);
+        const normalizedBaseUrl =
+            this._normalizePath(baseUrl);
+
+        for (
+            const match of normalizedBaseUrl.matchAll(
+                /<([^:>]+):([A-Za-z_]\w*)>/g,
+            )
+        ) {
+            const type = match[1];
+
+            if (type !== "str" && type !== "int") {
+                throw new UnsupportedRouteParameterType(
+                    type ?? "",
+                );
+            }
+        }
+
+        const unmatchedSyntax = normalizedBaseUrl
+            .replace(
+                /<(str|int):([A-Za-z_]\w*)>/g,
+                "",
+            );
+
+        if (
+            unmatchedSyntax.includes("<") ||
+            unmatchedSyntax.includes(">")
+        ) {
+            throw new RouteParametersError(
+                normalizedBaseUrl,
+                {
+                    cause: new SyntaxError(
+                        "Invalid base URL parameter syntax.",
+                    ),
+                },
+            );
+        }
+
+        return normalizedBaseUrl;
+    }
+
+    protected _joinBaseUrl(path: string): string {
+        const normalizedPath =
+            this._normalizePath(path);
+
+        if (!this._baseUrl) {
+            return normalizedPath;
+        }
+
+        if (normalizedPath === "/") {
+            return this._baseUrl;
+        }
+
+        return this._normalizePath(
+            `${this._baseUrl}/${normalizedPath}`,
+        );
     }
 
     protected _sortRoutes(
@@ -498,15 +559,6 @@ class Router<TApp extends App> {
     route = async (): Promise<void> => {
         try {
             let path = location.pathname;
-
-            if (
-                this.baseUrl &&
-                path.startsWith(this.baseUrl)
-            ) {
-                path = path.slice(
-                    this.baseUrl.length,
-                );
-            }
 
             if (!path) {
                 path = this.indexRoute;
@@ -773,7 +825,10 @@ class Router<TApp extends App> {
         );
     }
 
-    async redirect(path: string): Promise<void> {
+    async redirect(
+        path: string,
+        options: RedirectOptions = {},
+    ): Promise<void> {
         if (
             typeof path !== "string" ||
             path.trim().length === 0
@@ -783,7 +838,101 @@ class Router<TApp extends App> {
             );
         }
 
-        await this._handleLinkPress(path);
+        const destination = options.useBaseUrl
+            ? this._createBaseUrlDestination(
+                path,
+                options.baseParameters ?? {},
+            )
+            : path;
+
+        await this._handleLinkPress(destination);
+    }
+
+    protected _createBaseUrlDestination(
+        path: string,
+        baseParameters: RouteParameters,
+    ): string {
+        if (!this.baseUrl) {
+            return path;
+        }
+
+        const parameters = {
+            ...this.routeParameters,
+            ...baseParameters,
+        };
+        const expandedBaseUrl =
+            this.baseUrl.replace(
+                /<(str|int):([A-Za-z_]\w*)>/g,
+                (
+                    _placeholder: string,
+                    type: RouteParameterType,
+                    parameterName: string,
+                ): string => {
+                    const value =
+                        parameters[parameterName];
+
+                    if (value === undefined) {
+                        throw new RouteParametersError(
+                            this.baseUrl,
+                            {
+                                cause: new Error(
+                                    `Missing base URL parameter '${parameterName}'.`,
+                                ),
+                            },
+                        );
+                    }
+
+                    if (
+                        type === "int" &&
+                        !Number.isInteger(Number(value))
+                    ) {
+                        throw new RouteParametersError(
+                            this.baseUrl,
+                            {
+                                cause: new TypeError(
+                                    `Base URL parameter '${parameterName}' must be an integer.`,
+                                ),
+                            },
+                        );
+                    }
+
+                    const stringValue = String(value);
+
+                    if (stringValue.length === 0) {
+                        throw new RouteParametersError(
+                            this.baseUrl,
+                            {
+                                cause: new TypeError(
+                                    `Base URL parameter '${parameterName}' cannot be empty.`,
+                                ),
+                            },
+                        );
+                    }
+
+                    return encodeURIComponent(
+                        stringValue,
+                    );
+                },
+            );
+        const destination = new URL(
+            path,
+            location.origin,
+        );
+        const destinationPath =
+            this._normalizePath(
+                destination.pathname,
+            );
+        const pathname = destinationPath === "/"
+            ? expandedBaseUrl
+            : this._normalizePath(
+                `${expandedBaseUrl}/${destinationPath}`,
+            );
+
+        return (
+            `${pathname}` +
+            `${destination.search}` +
+            `${destination.hash}`
+        );
     }
 
     protected _handleLinkPress = async (
@@ -814,11 +963,10 @@ class Router<TApp extends App> {
 
     urlIsCurrentPath(href: string): boolean {
         const url = new URL(href, location.href);
-        const path = this._normalizePath(
-            url.pathname.replace(this.baseUrl, ""),
-        );
+        const path =
+            this._normalizePath(url.pathname);
 
-        return path === this.currentRoute?.route;
+        return path === this.currentRoute?.path;
     }
 
     get routeParameters(): RouteParameters {
@@ -869,12 +1017,12 @@ class Router<TApp extends App> {
         return this._routesMap;
     }
 
-    get currentRoute(): ParsedRoute<TApp> | null {
+    get currentRoute(): MatchedRoute<TApp> | null {
         return this._currentRoute;
     }
 
     set currentRoute(
-        route: ParsedRoute<TApp> | null,
+        route: MatchedRoute<TApp> | null,
     ) {
         this._currentRoute = route;
     }

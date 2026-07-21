@@ -9,6 +9,8 @@ export type {
     AppContainer,
     AppDataChangeDetail,
     AppDataChangeEvent,
+    AppQueryChangeDetail,
+    AppQueryChangeEvent,
     DataStructure,
 } from "./app.js";
 
@@ -26,7 +28,8 @@ export {
 } from "./customElement.js";
 
 export type {
-    CustomElementClass
+    CustomElementClass,
+    FetchHtmlRequest,
 } from "./customElement.js"
 
 export type {
@@ -57,6 +60,7 @@ export type {
     ParsedRoute,
     MatchedRoute,
     RouterConfig,
+    RedirectOptions,
     HandlerArgs,
 } from "./router.js";
 
@@ -84,6 +88,14 @@ export type {
     ErrorHandlerMethod,
 } from "./errorHandler.js";
 
+export {
+    default as RequestHelper,
+} from "./requestHelper.js";
+
+export type {
+    RequestOptions,
+} from "./requestHelper.js";
+
 
 export {
     RenderError,
@@ -97,5 +109,9 @@ export {
     RouteNotFoundError,
     RouteParametersError,
     UnsupportedRouteParameterType,
-    NetworkError
+    NetworkError,
+    HttpRequestError,
+    JsonResponseError,
+    InternalServerError,
+    ServerComponentNotFound,
 } from "./errors.js";

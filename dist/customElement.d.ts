@@ -23,6 +23,13 @@ export declare class MarkupFetchError extends Error {
     protected elementName: string;
     constructor(msg: string, tagName: string);
 }
+export type FetchHtmlRequest = {
+    tagName: string;
+    groupName: string;
+    routeParameters?: Record<string, string | number> | null;
+    queryParameters?: Record<string, string>;
+    attributes?: Record<string, any>;
+};
 type MaybePromise<T> = T | Promise<T>;
 export type ComponentMethod = (this: CustomElement, ...args: any[]) => MaybePromise<unknown>;
 export type MarkupMethod = (this: CustomElement) => MaybePromise<string>;
@@ -80,12 +87,15 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _handleError(error: unknown): Promise<void>;
     protected _runLifecycle(stage: Lifecycle): Promise<void>;
     protected _markup(): Promise<string>;
+    templateCacheKey(): string;
     render: () => Promise<void>;
-    fetchHTML: () => Promise<string>;
+    _fetchHTML: () => Promise<string>;
+    fetchHTML: (request: FetchHtmlRequest) => Promise<string>;
     rerender: () => Promise<void>;
     protected _waitForSubelements(): Promise<void>;
     generateHash(length?: number): string;
     protected _updateBoundAppDataParts: EventListener;
+    protected _updateBoundQueryParamParts: EventListener;
     invalidate(bindingName: string): void;
     _refreshBoundElements(propertyName: string): void;
     protected _hydrate: () => void;
@@ -109,6 +119,8 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     get dataField(): string | null;
     get groupName(): string | null;
     get useServer(): boolean | null;
+    get cache(): boolean;
+    get cacheDuration(): number | null;
     get parent(): CustomElement | null;
     get args(): Record<string, unknown>;
     get dotJSengine(): (template: string) => string;

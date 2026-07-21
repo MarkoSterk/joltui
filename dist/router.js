@@ -2,6 +2,7 @@ import App from "./app.js";
 import { CustomElement, } from "./customElement.js";
 import { getElementMetadata, requireElementMetadata, } from "./elementMetadata.js";
 import { NotImplementedError } from "./utilities.js";
+import { AuthenticationError, AuthorizationError } from "./auth.js";
 export const routeEventsEnum = {
     START: "route-change.start",
     FINISHED: "route-change.finished",
@@ -39,24 +40,6 @@ export class UnsupportedRouteParameterType extends Error {
         this.name = "UnsupportedRouteParameterType";
     }
 }
-export class AuthenticationError extends Error {
-    path;
-    constructor(path, options) {
-        super("User not authenticated", options);
-        this.path = path;
-        this.name = "AuthenticationError";
-    }
-}
-export class AuthorizationError extends Error {
-    path;
-    roles;
-    constructor(path, roles, options) {
-        super("User is not authorized for this route", options);
-        this.path = path;
-        this.roles = roles;
-        this.name = "AuthorizationError";
-    }
-}
 function isCustomElementClass(value) {
     return (typeof value === "function" &&
         value.prototype instanceof CustomElement);
@@ -90,8 +73,8 @@ class Router {
         this._app = app;
         this._baseLayout = baseLayout;
         this._defaultTarget = defaultTarget;
-        this._indexRoute = this._normalizePath(indexRoute);
         this._baseUrl = this._normalizeBaseUrl(baseUrl);
+        this._indexRoute = this._joinBaseUrl(indexRoute);
         this._routes = this._discoverRoutes();
         this._routesMap = this._parseRoutes(this._routes);
         this.app.addEventListener("click", this._clickHandler);
@@ -135,7 +118,7 @@ class Router {
                 `in app.elements.`);
         }
         return {
-            path: this._normalizePath(metadata.path),
+            path: this._joinBaseUrl(metadata.path),
             handler,
             target: metadata.target ??
                 this._defaultTarget,
@@ -183,7 +166,32 @@ class Router {
         if (!baseUrl || baseUrl === "/") {
             return "";
         }
-        return this._normalizePath(baseUrl);
+        const normalizedBaseUrl = this._normalizePath(baseUrl);
+        for (const match of normalizedBaseUrl.matchAll(/<([^:>]+):([A-Za-z_]\w*)>/g)) {
+            const type = match[1];
+            if (type !== "str" && type !== "int") {
+                throw new UnsupportedRouteParameterType(type ?? "");
+            }
+        }
+        const unmatchedSyntax = normalizedBaseUrl
+            .replace(/<(str|int):([A-Za-z_]\w*)>/g, "");
+        if (unmatchedSyntax.includes("<") ||
+            unmatchedSyntax.includes(">")) {
+            throw new RouteParametersError(normalizedBaseUrl, {
+                cause: new SyntaxError("Invalid base URL parameter syntax."),
+            });
+        }
+        return normalizedBaseUrl;
+    }
+    _joinBaseUrl(path) {
+        const normalizedPath = this._normalizePath(path);
+        if (!this._baseUrl) {
+            return normalizedPath;
+        }
+        if (normalizedPath === "/") {
+            return this._baseUrl;
+        }
+        return this._normalizePath(`${this._baseUrl}/${normalizedPath}`);
     }
     _sortRoutes(routeMap) {
         const sortedRoutes = Array.from(routeMap.entries()).sort(([firstPath], [secondPath]) => {
@@ -253,10 +261,6 @@ class Router {
     route = async () => {
         try {
             let path = location.pathname;
-            if (this.baseUrl &&
-                path.startsWith(this.baseUrl)) {
-                path = path.slice(this.baseUrl.length);
-            }
             if (!path) {
                 path = this.indexRoute;
             }
@@ -379,12 +383,53 @@ class Router {
         this._routeParameters = {};
         throw new RouteNotFoundError(normalizedPath);
     }
-    async redirect(path) {
+    async redirect(path, options = {}) {
         if (typeof path !== "string" ||
             path.trim().length === 0) {
             throw new TypeError("Redirect path must be a non-empty string.");
         }
-        await this._handleLinkPress(path);
+        const destination = options.useBaseUrl
+            ? this._createBaseUrlDestination(path, options.baseParameters ?? {})
+            : path;
+        await this._handleLinkPress(destination);
+    }
+    _createBaseUrlDestination(path, baseParameters) {
+        if (!this.baseUrl) {
+            return path;
+        }
+        const parameters = {
+            ...this.routeParameters,
+            ...baseParameters,
+        };
+        const expandedBaseUrl = this.baseUrl.replace(/<(str|int):([A-Za-z_]\w*)>/g, (_placeholder, type, parameterName) => {
+            const value = parameters[parameterName];
+            if (value === undefined) {
+                throw new RouteParametersError(this.baseUrl, {
+                    cause: new Error(`Missing base URL parameter '${parameterName}'.`),
+                });
+            }
+            if (type === "int" &&
+                !Number.isInteger(Number(value))) {
+                throw new RouteParametersError(this.baseUrl, {
+                    cause: new TypeError(`Base URL parameter '${parameterName}' must be an integer.`),
+                });
+            }
+            const stringValue = String(value);
+            if (stringValue.length === 0) {
+                throw new RouteParametersError(this.baseUrl, {
+                    cause: new TypeError(`Base URL parameter '${parameterName}' cannot be empty.`),
+                });
+            }
+            return encodeURIComponent(stringValue);
+        });
+        const destination = new URL(path, location.origin);
+        const destinationPath = this._normalizePath(destination.pathname);
+        const pathname = destinationPath === "/"
+            ? expandedBaseUrl
+            : this._normalizePath(`${expandedBaseUrl}/${destinationPath}`);
+        return (`${pathname}` +
+            `${destination.search}` +
+            `${destination.hash}`);
     }
     _handleLinkPress = async (href) => {
         const destination = new URL(href, location.href);
@@ -401,8 +446,8 @@ class Router {
     }
     urlIsCurrentPath(href) {
         const url = new URL(href, location.href);
-        const path = this._normalizePath(url.pathname.replace(this.baseUrl, ""));
-        return path === this.currentRoute?.route;
+        const path = this._normalizePath(url.pathname);
+        return path === this.currentRoute?.path;
     }
     get routeParameters() {
         return this._routeParameters;

@@ -16,7 +16,21 @@ export function auth(roles = []) {
     };
 }
 export class AuthenticationError extends Error {
+    path;
+    constructor(path, options) {
+        super("User not authenticated", options);
+        this.path = path;
+        this.name = "AuthenticationError";
+    }
 }
 export class AuthorizationError extends Error {
+    path;
+    roles;
+    constructor(path, roles, options) {
+        super("User is not authorized for this route", options);
+        this.path = path;
+        this.roles = roles;
+        this.name = "AuthorizationError";
+    }
 }
 //# sourceMappingURL=auth.js.map

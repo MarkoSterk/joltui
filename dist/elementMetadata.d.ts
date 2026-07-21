@@ -6,6 +6,8 @@ export type ComponentConfigs = {
     dataField?: string | null;
     groupName?: string | null;
     useServer?: boolean | null;
+    cache?: boolean;
+    cacheDuration?: number;
 };
 export type AuthenticationMetadata = Readonly<{
     authenticationRequired: boolean;
@@ -25,6 +27,8 @@ type BaseElementMetadata = Readonly<{
     dataField: string | null;
     groupName: string | null;
     useServer: boolean | null;
+    cache: boolean;
+    cacheDuration: number | null;
 }>;
 export type ComponentMetadata = BaseElementMetadata & Readonly<{
     kind: "component";

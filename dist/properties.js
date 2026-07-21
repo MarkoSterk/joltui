@@ -81,6 +81,7 @@ export function queryParam(parameterName, defaultValue = null, bindingName) {
     const normalizedName = assertNonEmptyString(parameterName, "Query parameter name cannot be empty.");
     const binding = bindingName?.trim() ||
         `query-${normalizedName}`;
+    const queryBinding = `query.${normalizedName}`;
     return function (_target, context) {
         assertAccessor(context, "@queryParam");
         return {
@@ -98,7 +99,9 @@ export function queryParam(parameterName, defaultValue = null, bindingName) {
                     .updateQueryParameters({
                     [normalizedName]: value,
                 });
-                this.invalidate(binding);
+                if (binding !== queryBinding) {
+                    this.invalidate(binding);
+                }
             },
         };
     };

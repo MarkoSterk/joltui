@@ -1,12 +1,14 @@
-import DevApp from "./app/app.js";
+import FieldnotesApp from "./app/app.js";
+import { posts } from "./app/data/posts.js";
 
-const app = new DevApp({
-    appName: "JoltUI development",
+const app = new FieldnotesApp({
+    appName: "Fieldnotes",
     dataStructure: {
+        posts,
         user: null,
-        appCount: 0
     },
-    serverComponentsUrl: "http://localhost:8080/ecris/server-components/si/sl/"
+    templatesCacheDuration: 180,
+    templatesCacheCleanupInterval: 60,
 });
 
 await app.init("#app");

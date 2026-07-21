@@ -14,6 +14,8 @@ export type ComponentConfigs = {
     dataField?: string | null;
     groupName?: string | null;
     useServer?: boolean | null;
+    cache?: boolean;
+    cacheDuration?: number;
 };
 
 export type AuthenticationMetadata = Readonly<{
@@ -38,6 +40,8 @@ type BaseElementMetadata = Readonly<{
     dataField: string | null;
     groupName: string | null;
     useServer: boolean | null;
+    cache: boolean;
+    cacheDuration: number | null;
 }>;
 
 export type ComponentMetadata =
@@ -141,6 +145,28 @@ function assertComponentConfigs(
     ) {
         throw new TypeError(
             "useServer must be a boolean, null, or undefined.",
+        );
+    }
+
+    if (
+        configs.cacheDuration !== undefined &&
+        (
+            typeof configs.cacheDuration !== "number" ||
+            !Number.isFinite(configs.cacheDuration) ||
+            configs.cacheDuration < 0
+        )
+    ) {
+        throw new TypeError(
+            "cacheDuration must be a finite, non-negative number or undefined.",
+        );
+    }
+
+    if (
+        configs.cache !== undefined &&
+        typeof configs.cache !== "boolean"
+    ) {
+        throw new TypeError(
+            "cache must be a boolean or undefined.",
         );
     }
 }
@@ -332,6 +358,10 @@ export function component<
                     configs.groupName ?? null,
                 useServer:
                     configs.useServer ?? null,
+                cache:
+                    configs.cache ?? false,
+                cacheDuration:
+                    configs.cacheDuration ?? null,
             },
         );
     };

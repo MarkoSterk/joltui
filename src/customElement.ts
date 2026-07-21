@@ -18,7 +18,7 @@ import {
     requireElementMetadata,
     type ElementMetadata,
 } from "./elementMetadata.js";
-import { AuthenticationError, AuthorizationError, InternalServerError, NetworkError } from "./errors.js";
+import { AuthenticationError, AuthorizationError, InternalServerError, NetworkError, ServerComponentNotFound } from "./errors.js";
 
 export class RenderError extends Error {
     protected readonly elementName: string;
@@ -81,6 +81,14 @@ export class MarkupFetchError extends Error{
         this.elementName = tagName;
         this.name = "MarkupFetchError";
     }
+}
+
+export type FetchHtmlRequest = {
+    tagName: string;
+    groupName: string;
+    routeParameters?: Record<string, string|number>|null;
+    queryParameters?: Record<string, string>;
+    attributes?: Record<string, any>
 }
 
 type MaybePromise<T> = T | Promise<T>;
@@ -245,6 +253,10 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             dataEventEnum.CHANGE,
             this._updateBoundAppDataParts,
         );
+        this.app.removeEventListener(
+            dataEventEnum.QUERY_CHANGE,
+            this._updateBoundQueryParamParts,
+        );
         if (this.dataField) {
             this.app.removeDataListener(this);
         }
@@ -320,6 +332,11 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             this.app.addEventListener(
                 dataEventEnum.CHANGE,
                 this._updateBoundAppDataParts,
+            );
+
+            this.app.addEventListener(
+                dataEventEnum.QUERY_CHANGE,
+                this._updateBoundQueryParamParts,
             );
 
             if (this.dataField) {
@@ -398,9 +415,50 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
     }
 
+    templateCacheKey(): string {
+        return this.app.getTemplateCacheKey(
+            this.tagName,
+            this.args,
+        );
+    }
+
     render = async (): Promise<void> => {
         try {
-            const renderedHtml = this.useServer ? await this.fetchHTML() : await this._markup();
+            const renderTemplate = async (): Promise<string> =>
+                this.useServer
+                    ? await this._fetchHTML()
+                    : await this._markup();
+
+            let renderedHtml: string;
+
+            if (this.cache) {
+                const cacheKey =
+                    this.templateCacheKey();
+
+                if (
+                    (
+                        typeof cacheKey !== "string" ||
+                        cacheKey.trim().length === 0
+                    )
+                ) {
+                    throw new TypeError(
+                        "templateCacheKey must return a non-empty string.",
+                    );
+                }
+                const cacheDuration =
+                    this.cacheDuration ??
+                    this.app.templatesCacheDuration;
+
+                renderedHtml = cacheDuration > 0
+                    ? await this.app.getOrSetCachedTemplate(
+                        cacheKey,
+                        cacheDuration,
+                        renderTemplate,
+                    )
+                    : await renderTemplate();
+            } else {
+                renderedHtml = await renderTemplate();
+            }
 
             this.innerHTML = renderedHtml;
         } catch (error: unknown) {
@@ -410,7 +468,17 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
     };
 
-    fetchHTML = async (): Promise<string> => {
+    _fetchHTML = async (): Promise<string> => {
+        return await this.fetchHTML({
+            tagName: this.tagName.toLowerCase(),
+            groupName: this.groupName == null ? "default" : this.groupName,
+            queryParameters: this.app.queryParameters || {},
+            routeParameters: this.app?.router.routeParameters || {},
+            attributes: this.args,
+        });
+    }
+
+    fetchHTML = async (request: FetchHtmlRequest): Promise<string> => {
         if(!this.app.serverComponentsUrl){
             throw new Error("If using server components you need to provide the 'serverComponentsUrl' property at application initialization.")
         }
@@ -420,19 +488,20 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({
-                    tagName: this.tagName.toLowerCase(),
-                    groupName: this.groupName == null ? "default" : this.groupName,
-                    queryParameters: this.app.queryParameters || {},
-                    routeParameters: this.app?.router.routeParameters || {}
-                })
+                body: JSON.stringify(request)
             })
             if(!response.ok){
+                if(response.status == 400){
+                    throw new Error("Bad request. Component request object is required.")
+                }
                 if(response.status == 401){
                     throw new AuthenticationError("Missing authentication for requested route");
                 }
                 if(response.status == 403){
                     throw new AuthorizationError("User is not authorized for this route", []);
+                }
+                if(response.status == 404){
+                    throw new ServerComponentNotFound(this.tagName.toLowerCase(), this.groupName || "default")
                 }
                 if(response.status == 500){
                     throw new InternalServerError("Something went wrong on the server during component content fetch");
@@ -505,6 +574,19 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             `app.${customEvent.detail.field}`,
         );
     };
+
+    protected _updateBoundQueryParamParts:
+        EventListener = (
+        event: Event,
+    ): void => {
+        const customEvent =
+            event as CustomEvent<{
+                field: string;
+            }>;
+        this._refreshBoundElements(
+            `query.${customEvent.detail.field}`,
+        );
+    }
 
     invalidate(bindingName: string): void {
         if (!bindingName) {
@@ -948,6 +1030,14 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
     get useServer(): boolean | null {
         return this.metadata.useServer;
+    }
+
+    get cache(): boolean {
+        return this.metadata.cache;
+    }
+
+    get cacheDuration(): number | null {
+        return this.metadata.cacheDuration;
     }
 
     get parent(): CustomElement | null {

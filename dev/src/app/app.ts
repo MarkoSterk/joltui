@@ -1,45 +1,32 @@
 import {
     App,
-    Lifecycle,
-    lifecycle,
+    type AppConfig,
     type CustomElementClass,
     type ErrorHandlerClass,
 } from "joltui";
+import Elements from "./elements.js";
+import BlogErrorHandler from "./errorHandler.js";
+import AppLayout from "./layouts/appLayout.js";
+import BlogRouter from "./router.js";
 
-import DevErrorHandler from "./errorHandler.js";
-import Elements from "./elements.js"
-import DevRouter from "./router.js";
-import DevLayout from "./layouts/layout.js";
+export default class FieldnotesApp extends App<FieldnotesApp> {
+    override readonly elements:
+        readonly CustomElementClass<FieldnotesApp>[] = Elements;
 
-export default class DevApp extends App {
-    override readonly elements: readonly CustomElementClass<DevApp>[] = Elements;
-    
-    override readonly errorHandlers: readonly ErrorHandlerClass<DevApp>[] = [
-        DevErrorHandler
-    ]
+    override readonly errorHandlers:
+        readonly ErrorHandlerClass<FieldnotesApp>[] = [
+            BlogErrorHandler,
+        ];
 
-    protected override routerGenerator() {
-        return new DevRouter({app: this, baseLayout: DevLayout, defaultTarget: "#page"});
+    constructor(config: AppConfig<FieldnotesApp>) {
+        super(config);
     }
 
-    @lifecycle(Lifecycle.BEFORE_INIT)
-    protected beforeInitialization(): void {
-        console.log("Dev application initialization started.");
-        console.log("Fetching user...")
-        console.log("User not authenticated...")
-        // this.setData("user", {
-        //     email: "marko.sterk@izum.si",
-        //     roles: ["ADMIN", "SUPERUSER"]
-        // })
-    }
-
-    @lifecycle(Lifecycle.AFTER_INIT)
-    protected afterInitialization(): void {
-        console.log("Dev application initialized.");
-    }
-
-    @lifecycle(Lifecycle.AFTER_INIT)
-    protected afterInitializationTwo(): void {
-        console.log("Second after init...");
+    protected override routerGenerator(): BlogRouter {
+        return new BlogRouter({
+            app: this,
+            baseLayout: AppLayout,
+            defaultTarget: "#page-content",
+        });
     }
 }

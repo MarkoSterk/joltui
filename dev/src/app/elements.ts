@@ -1,18 +1,21 @@
-import DevLayout from "./layouts/layout.js";
-import LoginLayout from "./layouts/loginLayout.js";
+import AppLayout from "./layouts/appLayout.js";
+import AuthLayout from "./layouts/authLayout.js";
+import NotFoundPage from "./errorPages/notFoundPage.js";
+import AboutPage from "./pages/aboutPage.js";
+import DraftsPage from "./pages/draftsPage.js";
 import HomePage from "./pages/homePage.js";
 import LoginPage from "./pages/loginPage.js";
-import SecondPage from "./pages/secondPage.js";
-import CounterButton from "./components/buttonCounter.js";
-import ForbiddenErrorPage from "./errorPages/403_forbidden.js";
-
+import PostPage from "./pages/postPage.js";
+import ProfilePage from "./pages/profilePage.js";
 
 export default [
-    DevLayout,
-    LoginLayout,
+    AppLayout,
+    AuthLayout,
     HomePage,
+    PostPage,
+    AboutPage,
     LoginPage,
-    SecondPage,
-    CounterButton,
-    ForbiddenErrorPage
-]
+    ProfilePage,
+    DraftsPage,
+    NotFoundPage,
+] as const;

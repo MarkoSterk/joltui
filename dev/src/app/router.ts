@@ -1,25 +1,17 @@
-import {
-    Router
-} from "joltui";
+import { Router } from "joltui";
+import type FieldnotesApp from "./app.js";
+import type { DemoUser } from "./types.js";
 
-import type DevApp from "./app.js";
+export default class BlogRouter extends Router<FieldnotesApp> {
+    override isAuthenticated = async (): Promise<boolean> =>
+        this.app.getData<DemoUser | null>("user") !== null;
 
-type UserObject = {
-    email: string,
-    roles: string[]
-}
-
-export default class DevRouter extends Router<DevApp> {
-    isAuthenticated = async (): Promise<boolean> => {
-        const isAuthenticated = this.app.getData("user") != null;
-        //console.log("User is authenticated: ", isAuthenticated)
-        return isAuthenticated;
-    }
-
-    checkUserRoles = async(roles: unknown[]) =>{
-        const user = this.app.getData<UserObject>("user");
-        // console.log("Required user roles: ", roles);
-        // console.log("User roles: ", user.roles);
-        return roles.some(r=> user.roles.includes(r as string))
-    }
+    override checkUserRoles = async (
+        roles: unknown[],
+    ): Promise<boolean> => {
+        const user = this.app.getData<DemoUser | null>("user");
+        return Boolean(
+            user && roles.includes(user.role),
+        );
+    };
 }

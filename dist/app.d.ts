@@ -4,13 +4,19 @@ import { CustomElement, type CustomElementClass } from "./customElement.js";
 import { Lifecycle } from "./lifecycle.js";
 export declare const dataEventEnum: {
     readonly CHANGE: "app-data-change";
+    readonly QUERY_CHANGE: "query-parameter-change";
 };
 export type AppDataChangeDetail = {
     field: string;
 };
 export type AppDataChangeEvent = CustomEvent<AppDataChangeDetail>;
+export type AppQueryChangeDetail = {
+    field: string;
+};
+export type AppQueryChangeEvent = CustomEvent<AppQueryChangeDetail>;
 interface AppEventMap extends GlobalEventHandlersEventMap {
     "app-data-change": AppDataChangeEvent;
+    "query-parameter-change": AppQueryChangeEvent;
 }
 type AppEventListener<K extends keyof AppEventMap> = (this: Element, event: AppEventMap[K]) => void;
 type DataChangeListener = AppEventListener<typeof dataEventEnum.CHANGE>;
@@ -23,8 +29,15 @@ export type AppConfig<TApp extends App<TApp> = App<any>> = {
     serverComponentsUrl?: string | null;
     dataStructure?: DataStructure | null;
     container?: AppContainer<TApp> | null;
+    templatesCacheDuration?: number | null;
+    templatesCacheCleanupInterval?: number | null;
 };
 type ElementHtmlSetter = (this: Element, value: string) => void;
+type TemplatesCacheEntry = {
+    template: string;
+    duration: number;
+    setTime: number;
+};
 declare class App<TApp extends App<TApp> = any> {
     readonly elements: readonly CustomElementClass<TApp>[];
     readonly errorHandlers: readonly ErrorHandlerClass<TApp>[];
@@ -46,7 +59,12 @@ declare class App<TApp extends App<TApp> = any> {
     protected readonly _originalDocQSA: typeof Document.prototype.querySelectorAll;
     protected readonly _originalElQS: typeof Element.prototype.querySelector;
     protected readonly _originalElQSA: typeof Element.prototype.querySelectorAll;
-    constructor({ appName, serverComponentsUrl, dataStructure, container, }: AppConfig<TApp>);
+    protected readonly _templatesCache: Map<string, TemplatesCacheEntry>;
+    protected readonly _pendingTemplateCache: Map<string, Promise<string>>;
+    protected _templatesCacheDefaultDuration: number;
+    protected _templatesCacheCleanupInterval: number;
+    protected _templatesCacheCleanupTimer: ReturnType<typeof globalThis.setInterval> | null;
+    constructor({ appName, serverComponentsUrl, dataStructure, container, templatesCacheDuration, templatesCacheCleanupInterval, }: AppConfig<TApp>);
     init: (target?: string | Element) => Promise<void>;
     protected get application(): TApp;
     protected routerGenerator(): Router<TApp> | null;
@@ -76,6 +94,9 @@ declare class App<TApp extends App<TApp> = any> {
     getData<T = unknown>(field: string): T;
     setData(field: string, data: unknown): void;
     protected _dataChangeEvent(field: string): void;
+    protected _queryChangeEvent(field: string): void;
+    protected _getChangedQueryParameterNames(previousParameters: URLSearchParams, currentParameters: URLSearchParams): string[];
+    protected _emitQueryParameterChanges(parameterNames: readonly string[]): void;
     get data(): ReadonlyMap<string, unknown>;
     get children(): HTMLCollection;
     get childNodes(): NodeListOf<ChildNode>;
@@ -89,14 +110,25 @@ declare class App<TApp extends App<TApp> = any> {
     get originalInsertAdjacentHTML(): typeof Element.prototype.insertAdjacentHTML;
     get queryParameters(): Record<string, string>;
     set queryParameters(params: Record<string, string>);
-    updateQueryParameters(params: Record<string, string | number>): void;
+    updateQueryParameters(params: Record<string, string | number | null>): void;
     createQueryParametersString(params: Record<string, string | number>): string;
+    getTemplateCacheKey(tagName: string, args?: Record<string, unknown>): string;
+    setCachedTemplate(key: string, template: string, duration: number): void;
+    getCachedTemplate(key: string): string | null;
+    getOrSetCachedTemplate(key: string, duration: number, templateFactory: () => string | Promise<string>): Promise<string>;
+    removeCachedTemplate(key: string): boolean;
+    cleanTemplatesCache: () => number;
+    protected _startTemplatesCacheCleanup(): void;
     get hash(): string;
     get port(): string;
     get hostname(): string;
     get host(): string;
     get pathname(): string;
     get origin(): string;
+    get templatesCacheDuration(): number;
+    set templatesCacheDuration(duration: number);
+    get templatesCacheCleanupInterval(): number;
+    set templatesCacheCleanupInterval(interval: number);
 }
 export default App;
 //# sourceMappingURL=app.d.ts.map

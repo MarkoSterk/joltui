@@ -6,7 +6,55 @@ import { requireElementMetadata } from "./elementMetadata.js";
 import { Lifecycle, getLifecycleMethods, } from "./lifecycle.js";
 export const dataEventEnum = {
     CHANGE: "app-data-change",
+    QUERY_CHANGE: "query-parameter-change",
 };
+function assertCacheDuration(value, propertyName) {
+    if (typeof value !== "number" ||
+        !Number.isFinite(value) ||
+        value < 0) {
+        throw new TypeError(`${propertyName} must be a finite, non-negative number.`);
+    }
+}
+function stableSerialize(value, seen = new WeakSet()) {
+    if (value === null) {
+        return "null";
+    }
+    if (typeof value === "number" && !Number.isFinite(value)) {
+        return JSON.stringify({
+            type: "number",
+            value: String(value),
+        });
+    }
+    if (typeof value === "bigint") {
+        return JSON.stringify({
+            type: "bigint",
+            value: value.toString(),
+        });
+    }
+    if (typeof value !== "object") {
+        return JSON.stringify(value === undefined
+            ? { type: "undefined" }
+            : value) ?? String(value);
+    }
+    if (value instanceof Date) {
+        return JSON.stringify({
+            type: "date",
+            value: value.toISOString(),
+        });
+    }
+    if (seen.has(value)) {
+        throw new TypeError("Template cache key values cannot contain circular references.");
+    }
+    seen.add(value);
+    const serialized = Array.isArray(value)
+        ? `[${value.map(item => stableSerialize(item, seen)).join(",")}]`
+        : `{${Object.entries(value)
+            .sort(([first], [second]) => first.localeCompare(second))
+            .map(([key, item]) => `${JSON.stringify(key)}:${stableSerialize(item, seen)}`)
+            .join(",")}}`;
+    seen.delete(value);
+    return serialized;
+}
 class App {
     elements = [];
     errorHandlers = [];
@@ -28,12 +76,26 @@ class App {
     _originalDocQSA;
     _originalElQS;
     _originalElQSA;
-    constructor({ appName, serverComponentsUrl = null, dataStructure = null, container = null, }) {
+    _templatesCache;
+    _pendingTemplateCache = new Map();
+    _templatesCacheDefaultDuration = 300;
+    _templatesCacheCleanupInterval = 60;
+    _templatesCacheCleanupTimer = null;
+    constructor({ appName, serverComponentsUrl = null, dataStructure = null, container = null, templatesCacheDuration = null, templatesCacheCleanupInterval = null, }) {
         if (typeof appName !== "string" ||
             appName.trim().length === 0) {
             throw new TypeError("Application name must be a non-empty string.");
         }
         this._appName = appName;
+        if (templatesCacheDuration !== null) {
+            assertCacheDuration(templatesCacheDuration, "templatesCacheDuration");
+            this._templatesCacheDefaultDuration = templatesCacheDuration;
+        }
+        if (templatesCacheCleanupInterval !== null) {
+            assertCacheDuration(templatesCacheCleanupInterval, "templatesCacheCleanupInterval");
+            this._templatesCacheCleanupInterval =
+                templatesCacheCleanupInterval;
+        }
         if (serverComponentsUrl !== null) {
             this.serverComponentsUrl =
                 serverComponentsUrl;
@@ -63,12 +125,14 @@ class App {
             Element.prototype.querySelector;
         this._originalElQSA =
             Element.prototype.querySelectorAll;
+        this._templatesCache = new Map;
     }
     init = async (target) => {
         const container = this._resolveContainer(target);
         this._container = container;
         this._container.app = this.application;
         this._container.setAttribute("app-id", this.generateHash());
+        this._startTemplatesCacheCleanup();
         this.registerCustomElements(this.elements);
         this._modifyPrototypeMethods();
         this._errorHandlerInstances = this._initializeErrorHandlers();
@@ -341,6 +405,34 @@ class App {
             detail: { field },
         }));
     }
+    _queryChangeEvent(field) {
+        this.container.dispatchEvent(new CustomEvent(dataEventEnum.QUERY_CHANGE, {
+            detail: { field },
+        }));
+    }
+    _getChangedQueryParameterNames(previousParameters, currentParameters) {
+        const parameterNames = new Set([
+            ...previousParameters.keys(),
+            ...currentParameters.keys(),
+        ]);
+        const changedParameterNames = [];
+        for (const parameterName of parameterNames) {
+            const previousValues = previousParameters.getAll(parameterName);
+            const currentValues = currentParameters.getAll(parameterName);
+            if (previousValues.length !==
+                currentValues.length ||
+                previousValues.some((value, index) => value !==
+                    currentValues[index])) {
+                changedParameterNames.push(parameterName);
+            }
+        }
+        return changedParameterNames;
+    }
+    _emitQueryParameterChanges(parameterNames) {
+        for (const parameterName of parameterNames) {
+            this._queryChangeEvent(parameterName);
+        }
+    }
     get data() {
         return this._dataStructure;
     }
@@ -389,18 +481,34 @@ class App {
     }
     set queryParameters(params) {
         const url = new URL(location.href);
+        const previousParameters = new URLSearchParams(url.search);
         url.search = "";
         for (const [key, value] of Object.entries(params)) {
             url.searchParams.set(key, value);
         }
+        const changedParameterNames = this._getChangedQueryParameterNames(previousParameters, url.searchParams);
+        if (changedParameterNames.length === 0) {
+            return;
+        }
         history.pushState(history.state, "", url);
+        this._emitQueryParameterChanges(changedParameterNames);
     }
     updateQueryParameters(params) {
         const url = new URL(location.href);
+        const previousParameters = new URLSearchParams(url.search);
         for (const [key, value] of Object.entries(params)) {
+            if (value === null) {
+                url.searchParams.delete(key);
+                continue;
+            }
             url.searchParams.set(key, String(value));
         }
+        const changedParameterNames = this._getChangedQueryParameterNames(previousParameters, url.searchParams);
+        if (changedParameterNames.length === 0) {
+            return;
+        }
         history.pushState(history.state, "", url);
+        this._emitQueryParameterChanges(changedParameterNames);
     }
     createQueryParametersString(params) {
         const searchParams = new URLSearchParams();
@@ -408,6 +516,89 @@ class App {
             searchParams.set(key, String(value));
         }
         return searchParams.toString();
+    }
+    getTemplateCacheKey(tagName, args = {}) {
+        const queryParameters = Array.from(new URLSearchParams(location.search).entries()).sort(([firstKey, firstValue], [secondKey, secondValue]) => firstKey.localeCompare(secondKey) ||
+            firstValue.localeCompare(secondValue));
+        const routeParameters = this._router?.routeParameters ?? {};
+        return stableSerialize({
+            tagName: tagName.toLowerCase(),
+            routeParameters,
+            queryParameters,
+            args,
+            appData: Object.fromEntries(this._dataStructure),
+        });
+    }
+    setCachedTemplate(key, template, duration) {
+        assertCacheDuration(duration, "duration");
+        if (duration === 0) {
+            this._templatesCache.delete(key);
+            return;
+        }
+        this._templatesCache.set(key, {
+            template,
+            duration,
+            setTime: Date.now(),
+        });
+    }
+    getCachedTemplate(key) {
+        const cache = this._templatesCache.get(key);
+        if (!cache) {
+            return null;
+        }
+        if (Date.now() - cache.setTime >=
+            cache.duration * 1000) {
+            this._templatesCache.delete(key);
+            return null;
+        }
+        return cache.template;
+    }
+    async getOrSetCachedTemplate(key, duration, templateFactory) {
+        const cachedTemplate = this.getCachedTemplate(key);
+        if (cachedTemplate !== null) {
+            return cachedTemplate;
+        }
+        const pendingTemplate = this._pendingTemplateCache.get(key);
+        if (pendingTemplate) {
+            return await pendingTemplate;
+        }
+        const templatePromise = Promise.resolve()
+            .then(templateFactory)
+            .then(template => {
+            this.setCachedTemplate(key, template, duration);
+            return template;
+        })
+            .finally(() => {
+            this._pendingTemplateCache.delete(key);
+        });
+        this._pendingTemplateCache.set(key, templatePromise);
+        return await templatePromise;
+    }
+    removeCachedTemplate(key) {
+        return this._templatesCache.delete(key);
+    }
+    cleanTemplatesCache = () => {
+        const currentTime = Date.now();
+        let removedEntries = 0;
+        for (const [key, cache] of this._templatesCache) {
+            if (currentTime - cache.setTime >=
+                cache.duration * 1000) {
+                this._templatesCache.delete(key);
+                removedEntries++;
+            }
+        }
+        return removedEntries;
+    };
+    _startTemplatesCacheCleanup() {
+        if (this._templatesCacheCleanupTimer !== null) {
+            globalThis.clearInterval(this._templatesCacheCleanupTimer);
+            this._templatesCacheCleanupTimer = null;
+        }
+        if (this._templatesCacheCleanupInterval === 0) {
+            return;
+        }
+        this._templatesCacheCleanupTimer =
+            globalThis.setInterval(this.cleanTemplatesCache, this._templatesCacheCleanupInterval * 1000);
     }
     get hash() {
         return location.hash;
@@ -426,6 +617,21 @@ class App {
     }
     get origin() {
         return location.origin;
+    }
+    get templatesCacheDuration() {
+        return this._templatesCacheDefaultDuration;
+    }
+    set templatesCacheDuration(duration) {
+        assertCacheDuration(duration, "templatesCacheDuration");
+        this._templatesCacheDefaultDuration = duration;
+    }
+    get templatesCacheCleanupInterval() {
+        return this._templatesCacheCleanupInterval;
+    }
+    set templatesCacheCleanupInterval(interval) {
+        assertCacheDuration(interval, "templatesCacheCleanupInterval");
+        this._templatesCacheCleanupInterval = interval;
+        this._startTemplatesCacheCleanup();
     }
 }
 export default App;
