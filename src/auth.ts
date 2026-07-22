@@ -38,7 +38,7 @@ export function auth(
 }
 
 export class AuthenticationError extends Error {
-    protected readonly path: string;
+    readonly path: string;
 
     constructor(
         path: string,
@@ -51,8 +51,8 @@ export class AuthenticationError extends Error {
 }
 
 export class AuthorizationError extends Error {
-    protected readonly path: string;
-    protected readonly roles: unknown[];
+    readonly path: string;
+    readonly roles: unknown[];
 
     constructor(
         path: string,

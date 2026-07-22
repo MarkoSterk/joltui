@@ -7,7 +7,7 @@ import {
 import type FieldnotesApp from "../app.js";
 import type { BlogPost } from "../types.js";
 
-@page({ path: "/", title: "Fieldnotes — Ideas worth carrying" })
+@page({ path: "/", title: "ecris.frontend.pages.stories" })
 @component({ tagName: "home-page" })
 export default class HomePage extends CustomElement<FieldnotesApp> {
     get posts(): readonly BlogPost[] {

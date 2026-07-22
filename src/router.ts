@@ -84,6 +84,8 @@ export type Authentication = {
     rolesRequired: unknown[];
 };
 
+export type MaybePromise<T> = T | Promise<T>;
+
 export type HandlerArgs = Record<string, unknown>;
 
 export type RouteExtras = Record<string, unknown>;
@@ -234,19 +236,23 @@ class Router<TApp extends App> {
         );
     }
 
-    isAuthenticated = async (): Promise<boolean> => {
+    isAuthenticated(): MaybePromise<boolean> {
         throw new NotImplementedError(
             "Router.isAuthenticated",
         );
-    };
+    }
 
-    checkUserRoles = async (
+    checkUserRoles(
         _roles: unknown[],
-    ): Promise<boolean> => {
+    ): MaybePromise<boolean> {
         throw new NotImplementedError(
             "Router.checkUserRoles",
         );
-    };
+    }
+
+    titleGenerator(tagName: string, title: string|null): MaybePromise<string>{
+        return null as unknown as MaybePromise<string>;
+    }
 
     protected _discoverRoutes(): Route<TApp>[] {
         const routes: Route<TApp>[] = [];
@@ -656,7 +662,7 @@ class Router<TApp extends App> {
             await generatedHandler.initComplete;
         }
 
-        this._setTitle(matchedPath.title);
+        await this._setTitle(matchedPath.handler.tagName.toLowerCase(), matchedPath.title);
         this.currentRoute = matchedPath;
         this._emitRouteEvent(
             routeEventsEnum.FINISHED,
@@ -692,9 +698,16 @@ class Router<TApp extends App> {
         );
     };
 
-    protected _setTitle(
+    protected async _setTitle(
+        tagName: string,
         title: string | null,
-    ): void {
+    ): Promise<void> {
+        
+        const titleCandidate: string|null = await this.titleGenerator(tagName, title) || title;
+        this.setTitle(titleCandidate || this.app.appName);
+    }
+
+    async setTitle(title: string){
         let titleElement =
             document.head.querySelector("title");
 
@@ -703,9 +716,7 @@ class Router<TApp extends App> {
                 document.createElement("title");
             document.head.prepend(titleElement);
         }
-
-        titleElement.innerText =
-            title ?? this.app.appName;
+        titleElement.innerText = title;
     }
 
     protected _emitRouteEvent(

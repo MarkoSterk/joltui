@@ -8,7 +8,7 @@ import type FieldnotesApp from "../app.js";
 
 @page({
     path: "/404",
-    title: "Page not found — Fieldnotes",
+    title: "ecris.frontend.pages.notFound",
 })
 @component({ tagName: "not-found-page" })
 export default class NotFoundPage

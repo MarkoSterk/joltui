@@ -9,6 +9,7 @@ const app = new FieldnotesApp({
     },
     templatesCacheDuration: 180,
     templatesCacheCleanupInterval: 60,
+    serverComponentsUrl: "http://localhost:8080/ecris/server-components/si/sl"
 });
 
 await app.init("#app");

@@ -1,4 +1,4 @@
-import { CustomElement, component, html, page } from "joltui";
+import { CustomElement, component, html, page, queryParam } from "joltui";
 import type FieldnotesApp from "../app.js";
 import AuthLayout from "../layouts/authLayout.js";
 import type { DemoUser } from "../types.js";
@@ -6,6 +6,12 @@ import type { DemoUser } from "../types.js";
 @page({ path: "/login", title: "Sign in — Fieldnotes", layout: AuthLayout })
 @component({ tagName: "login-page" })
 export default class LoginPage extends CustomElement<FieldnotesApp> {
+
+    // @queryParam("target", "/profile")
+    // accessor target!: string;
+
+    target: string = "/profile"
+
     override markup = () => html`
         <section class="login-panel">
             <div class="login-copy">
@@ -43,12 +49,12 @@ export default class LoginPage extends CustomElement<FieldnotesApp> {
         const data = new FormData(form);
         const email = String(data.get("email") ?? "reader@fieldnotes.test");
         const user: DemoUser = {
-            name: "Alex Morgan",
+            name: "Andrej Novak",
             email,
             role: "READER",
-            initials: "AM",
+            initials: "AN",
         };
         this.app.setData("user", user);
-        await this.app.router.redirect("/profile");
+        await this.app.router.redirect(this.target);
     };
 }
