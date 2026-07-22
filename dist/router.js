@@ -80,12 +80,15 @@ class Router {
         this.app.addEventListener("click", this._clickHandler);
         window.addEventListener("popstate", this._popStateHandler);
     }
-    isAuthenticated = async () => {
+    isAuthenticated() {
         throw new NotImplementedError("Router.isAuthenticated");
-    };
-    checkUserRoles = async (_roles) => {
+    }
+    checkUserRoles(_roles) {
         throw new NotImplementedError("Router.checkUserRoles");
-    };
+    }
+    titleGenerator(tagName, title) {
+        return null;
+    }
     _discoverRoutes() {
         const routes = [];
         for (const elementClass of this.app.elements) {
@@ -304,7 +307,7 @@ class Router {
         if (generatedHandler) {
             await generatedHandler.initComplete;
         }
-        this._setTitle(matchedPath.title);
+        await this._setTitle(matchedPath.handler.tagName.toLowerCase(), matchedPath.title);
         this.currentRoute = matchedPath;
         this._emitRouteEvent(routeEventsEnum.FINISHED);
     };
@@ -320,15 +323,18 @@ class Router {
         await layoutElement.initComplete;
         this._emitRouteEvent(routeEventsEnum.LAYOUT_CHANGE_FINISHED);
     };
-    _setTitle(title) {
+    async _setTitle(tagName, title) {
+        const titleCandidate = await this.titleGenerator(tagName, title) || title;
+        this.setTitle(titleCandidate || this.app.appName);
+    }
+    async setTitle(title) {
         let titleElement = document.head.querySelector("title");
         if (!titleElement) {
             titleElement =
                 document.createElement("title");
             document.head.prepend(titleElement);
         }
-        titleElement.innerText =
-            title ?? this.app.appName;
+        titleElement.innerText = title;
     }
     _emitRouteEvent(eventType) {
         this.app.container.dispatchEvent(new CustomEvent(eventType, {

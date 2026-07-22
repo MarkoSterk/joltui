@@ -28,6 +28,7 @@ export type Authentication = {
     authenticationRequired: boolean;
     rolesRequired: unknown[];
 };
+export type MaybePromise<T> = T | Promise<T>;
 export type HandlerArgs = Record<string, unknown>;
 export type RouteExtras = Record<string, unknown>;
 export type Route<TApp extends App = App> = {
@@ -86,8 +87,9 @@ declare class Router<TApp extends App> {
     protected _routeParameters: RouteParameters;
     protected _inTransition: boolean;
     constructor({ baseUrl, baseLayout, defaultTarget, indexRoute, app, }: RouterConfig<TApp>);
-    isAuthenticated: () => Promise<boolean>;
-    checkUserRoles: (_roles: unknown[]) => Promise<boolean>;
+    isAuthenticated(): MaybePromise<boolean>;
+    checkUserRoles(_roles: unknown[]): MaybePromise<boolean>;
+    titleGenerator(tagName: string, title: string | null): MaybePromise<string>;
     protected _discoverRoutes(): Route<TApp>[];
     protected _createRouteFromMetadata(handler: CustomElementClass<TApp>, metadata: PageMetadata<TApp>): Route<TApp>;
     protected _parseRoutes(routes: readonly Route<TApp>[]): Map<string, ParsedRoute<TApp>>;
@@ -100,7 +102,8 @@ declare class Router<TApp extends App> {
     route: () => Promise<void>;
     protected _loadPath: (matchedPath: MatchedRoute<TApp>) => Promise<void>;
     protected _renderLayout: (layout: CustomElementClass<TApp>) => Promise<void>;
-    protected _setTitle(title: string | null): void;
+    protected _setTitle(tagName: string, title: string | null): Promise<void>;
+    setTitle(title: string): Promise<void>;
     protected _emitRouteEvent(eventType: string): void;
     protected _matchRoute(path: string): MatchedRoute<TApp>;
     redirect(path: string, options?: RedirectOptions): Promise<void>;
