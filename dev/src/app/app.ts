@@ -1,5 +1,7 @@
 import {
     App,
+    lifecycle,
+    Lifecycle,
     type AppConfig,
     type CustomElementClass,
     type ErrorHandlerClass,
@@ -28,5 +30,15 @@ export default class FieldnotesApp extends App<FieldnotesApp> {
             baseLayout: AppLayout,
             defaultTarget: "#page-content",
         });
+    }
+
+    @lifecycle(Lifecycle.BEFORE_INIT)
+    async setupFuntion(){
+        console.log("Before init")
+        //fetch request
+    }
+    @lifecycle(Lifecycle.EXTENSION_INIT)
+    async extensions(){
+
     }
 }

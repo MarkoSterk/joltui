@@ -1,7 +1,9 @@
 import {
     CustomElement,
+    Lifecycle,
     component,
     html,
+    lifecycle,
     page,
 } from "joltui";
 import type FieldnotesApp from "../app.js";
@@ -67,4 +69,9 @@ export default class PostPage extends CustomElement<FieldnotesApp> {
             </section>
         {{?}}
     `;
+
+    @lifecycle(Lifecycle.AFTER_RERENDER)
+    async afterRerender(){
+
+    }
 }

@@ -1,5 +1,6 @@
 import {
     AuthenticationError,
+    AuthorizationError,
     ErrorHandler,
     RouteNotFoundError,
     handles,
@@ -10,8 +11,12 @@ export default class BlogErrorHandler extends ErrorHandler<FieldnotesApp> {
     @handles(AuthenticationError)
     async authenticationError(error: AuthenticationError): Promise<void> {
         console.log("Authentication error. Redirecting to /login")
-        await this.app.router.redirect("/login");
-        //await this.app.router.redirect(`/login?target=${error.path}`);
+        //await this.app.router.redirect("/login");
+        await this.app.router.redirect(`/login?target=${error.path}`);
+    }
+    @handles(AuthorizationError)
+    async authorizationError(error: AuthorizationError){
+        //naredi kaj hočes
     }
 
     @handles(RouteNotFoundError)

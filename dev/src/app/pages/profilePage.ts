@@ -3,7 +3,7 @@ import type FieldnotesApp from "../app.js";
 import type { DemoUser } from "../types.js";
 
 @auth()
-@page({ path: "/profile", title: "Your profile — Fieldnotes" })
+@page({ path: "/profile", title: "ecris.frontend.pages.profile" })
 @component({ tagName: "profile-page" })
 export default class ProfilePage extends CustomElement<FieldnotesApp> {
     get user(): DemoUser {

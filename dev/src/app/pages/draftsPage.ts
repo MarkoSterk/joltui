@@ -1,7 +1,7 @@
 import { CustomElement, auth, component, html, page } from "joltui";
 import type FieldnotesApp from "../app.js";
 
-@auth()
+@auth(["Admin"])
 @page({ path: "/drafts", title: "Your drafts — Fieldnotes" })
 @component({ tagName: "drafts-page" })
 export default class DraftsPage extends CustomElement<FieldnotesApp> {
