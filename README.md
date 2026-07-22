@@ -639,9 +639,8 @@ Cache entries are also removed lazily when an expired key is requested.
 
 ## Notes
 
-- JoltUI modifies selected DOM prototype methods during application initialization to support template evaluation, JoltUI attributes, scoped selectors, and hydration. Initialize one application deliberately and test integration with other libraries that patch the DOM.
+- JoltUI modifies selected DOM prototype methods during application initialization to support template evaluation, JoltUI attributes, scoped selectors, and hydration.
 - Use application methods for shared data and query-parameter changes so bound markup receives change notifications.
-- Cache only markup whose complete rendering context is represented by its cache key.
 - Decorator order matters: `@component` must be the decorator closest to the class, with `@page`, `@layout`, and `@auth` above it as shown in the examples.
 
 ## License
