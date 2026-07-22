@@ -1,7 +1,7 @@
 {
   "name": "joltui",
   "version": "1.0.0",
-  "description": "Vanilla JS SPA framework",
+  "description": "TypeScript SPA framework",
   "license": "ISC",
   "author": "Marko Šterk <marko_sterk@hotmail.com>",
   "type": "module",
