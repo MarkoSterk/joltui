@@ -529,6 +529,7 @@ JoltUI sends a JSON `POST` request containing:
     groupName: "account",
     routeParameters: { /* current route parameters */ },
     queryParameters: { /* current query parameters */ },
+    attributes: {/* custom attributes (prefix: data-jolt-*) on the current element  */}
 }
 ```
 
