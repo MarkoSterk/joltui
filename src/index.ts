@@ -41,6 +41,7 @@ export type {
     PageMetadata,
     LayoutMetadata,
     AuthenticationMetadata,
+    SubLayoutConfig,
 } from "./elementMetadata.js";
 
 export {

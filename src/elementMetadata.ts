@@ -23,11 +23,20 @@ export type AuthenticationMetadata = Readonly<{
     rolesRequired: readonly unknown[];
 }>;
 
+export type SubLayoutConfig<
+    TApp extends App = App,
+> = Readonly<{
+    target: string;
+    layout: CustomElementClass<TApp>;
+}>;
+
 export type PageConfigs<
     TApp extends App = App,
 > = {
     path: string;
     layout?: CustomElementClass<TApp> | null;
+    subLayouts?:
+        readonly SubLayoutConfig<TApp>[] | null;
     title?: string | null;
     target?: string | null;
     extras?: Record<string, unknown> | null;
@@ -64,6 +73,8 @@ export type PageMetadata<
         kind: "page";
         path: string;
         layout: CustomElementClass<TApp> | null;
+        subLayouts:
+            readonly SubLayoutConfig<TApp>[];
         title: string | null;
         target: string | null;
         extras: Readonly<Record<string, unknown>>;
@@ -222,6 +233,50 @@ function assertPageConfigs(
         configs.target,
         "target",
     );
+
+    if (
+        configs.subLayouts !== undefined &&
+        configs.subLayouts !== null
+    ) {
+        if (!Array.isArray(configs.subLayouts)) {
+            throw new TypeError(
+                "Page subLayouts must be an array, null, or undefined.",
+            );
+        }
+
+        for (
+            const [index, subLayout]
+            of configs.subLayouts.entries()
+        ) {
+            if (
+                !subLayout ||
+                typeof subLayout !== "object"
+            ) {
+                throw new TypeError(
+                    `Page subLayouts[${index}] must be an object.`,
+                );
+            }
+
+            if (
+                typeof subLayout.target !== "string" ||
+                subLayout.target.trim().length === 0
+            ) {
+                throw new TypeError(
+                    `Page subLayouts[${index}].target must be ` +
+                    "a non-empty selector.",
+                );
+            }
+
+            if (
+                typeof subLayout.layout !== "function"
+            ) {
+                throw new TypeError(
+                    `Page subLayouts[${index}].layout must be ` +
+                    "a CustomElement class.",
+                );
+            }
+        }
+    }
 
     if (
         configs.extras !== undefined &&
@@ -414,6 +469,18 @@ export function page<
                 path: configs.path,
                 layout:
                     configs.layout ?? null,
+                subLayouts: Object.freeze(
+                    (configs.subLayouts ?? []).map(
+                        subLayout =>
+                            Object.freeze({
+                                target:
+                                    subLayout.target
+                                        .trim(),
+                                layout:
+                                    subLayout.layout,
+                            }),
+                    ),
+                ),
                 title:
                     configs.title ?? null,
                 target:

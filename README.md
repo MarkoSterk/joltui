@@ -327,6 +327,41 @@ A page can select a different layout or target:
 })
 ```
 
+### Sublayout chains
+
+Pages can compose an ordered chain of reusable layouts between the base
+layout and the page element:
+
+```ts
+@page({
+    path: "/account/profile",
+    subLayouts: [
+        {
+            target: "#page",
+            layout: AccountLayout,
+        },
+        {
+            target: "#account-content",
+            layout: ProfileLayout,
+        },
+    ],
+    target: "#profile-content",
+})
+@component({ tagName: "profile-page" })
+class ProfilePage extends CustomElement {}
+```
+
+Each sublayout must use `@layout` and must be registered in `app.elements`.
+The order is significant: the first target is resolved inside the base layout,
+and each later target is resolved inside the preceding sublayout. The page
+target is resolved inside the final sublayout.
+
+When consecutive pages request the same ordered combination of target
+selectors and layout classes, JoltUI preserves the existing sublayout
+instances and their state. At the first difference, that sublayout and
+everything below it are replaced. Navigating to a page without sublayouts
+removes the active sublayout chain before rendering the page.
+
 JoltUI currently renders one page handler per route; it does not provide nested route definitions.
 
 ### Base URL patterns

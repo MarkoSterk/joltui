@@ -7,6 +7,7 @@ import {
     getElementMetadata,
     requireElementMetadata,
     type PageMetadata,
+    type SubLayoutConfig,
 } from "./elementMetadata.js";
 import { NotImplementedError } from "./utilities.js";
 import { AuthenticationError, AuthorizationError } from "./auth.js";
@@ -97,6 +98,8 @@ export type Route<
     handler: CustomElementClass<TApp>;
     target: string;
     layout: CustomElementClass<TApp>;
+    subLayouts:
+        readonly SubLayoutConfig<TApp>[];
     title: string | null;
     extras: RouteExtras;
     authentication: Authentication | null;
@@ -109,6 +112,8 @@ export type ParsedRoute<
     handler: CustomElementClass<TApp>;
     target: string;
     layout: CustomElementClass<TApp>;
+    subLayouts:
+        readonly SubLayoutConfig<TApp>[];
     title: string | null;
     extras: RouteExtras;
     authentication: Authentication | null;
@@ -151,6 +156,15 @@ type CurrentState = {
     scrollPosition: ScrollPosition;
 };
 
+type ActiveSubLayout<
+    TApp extends App = App,
+> = {
+    target: string;
+    layout: CustomElementClass<TApp>;
+    container: Element;
+    element: CustomElement<TApp>;
+};
+
 function isCustomElementClass<
     TApp extends App = App,
 >(
@@ -177,6 +191,8 @@ class Router<TApp extends App> {
     protected _currentRoute: MatchedRoute<TApp> | null = null;
     protected _routeParameters: RouteParameters = {};
     protected _inTransition = false;
+    protected _activeSubLayouts:
+        ActiveSubLayout<TApp>[] = [];
 
     constructor({
         baseUrl = "",
@@ -318,6 +334,41 @@ class Router<TApp extends App> {
             );
         }
 
+        for (
+            const [index, subLayout]
+            of metadata.subLayouts.entries()
+        ) {
+            if (!isCustomElementClass<TApp>(subLayout.layout)) {
+                throw new TypeError(
+                    `Invalid sublayout at index ${index} ` +
+                    `configured for page '${handler.name}'.`,
+                );
+            }
+
+            const subLayoutMetadata =
+                requireElementMetadata(
+                    subLayout.layout,
+                );
+
+            if (subLayoutMetadata.kind !== "layout") {
+                throw new TypeError(
+                    `Page sublayout '${subLayout.layout.name}' ` +
+                    "must use @layout.",
+                );
+            }
+
+            if (
+                !this.app.elements.includes(
+                    subLayout.layout,
+                )
+            ) {
+                throw new Error(
+                    `Page sublayout '${subLayout.layout.name}' ` +
+                    "is not registered in app.elements.",
+                );
+            }
+        }
+
         return {
             path: this._joinBaseUrl(metadata.path),
             handler,
@@ -325,6 +376,7 @@ class Router<TApp extends App> {
                 metadata.target ??
                 this._defaultTarget,
             layout,
+            subLayouts: metadata.subLayouts,
             title: metadata.title,
             extras: metadata.extras,
             authentication:
@@ -354,6 +406,8 @@ class Router<TApp extends App> {
                     handler: route.handler,
                     target: route.target,
                     layout: route.layout,
+                    subLayouts:
+                        route.subLayouts,
                     title: route.title,
                     extras: route.extras,
                     authentication:
@@ -620,9 +674,13 @@ class Router<TApp extends App> {
             matchedPath.layout,
         );
 
-        const layout = this.app.querySelector(
-            matchedPath.layout.tagName,
-        ) as CustomElement<TApp> | null;
+        const layout = Array.from(
+            this.app.container.children,
+        ).find(
+            element =>
+                element instanceof
+                matchedPath.layout,
+        ) as CustomElement<TApp> | undefined;
 
         if (!layout) {
             throw new Error(
@@ -632,8 +690,15 @@ class Router<TApp extends App> {
 
         await layout.initComplete;
 
+        const pageRoot =
+            await this._renderSubLayouts(
+                layout,
+                matchedPath.subLayouts,
+            );
+
         const targetContainer =
-            this.app.querySelector(
+            this._findLayoutTarget(
+                pageRoot,
                 matchedPath.target,
             );
 
@@ -669,10 +734,146 @@ class Router<TApp extends App> {
         );
     };
 
+    protected async _renderSubLayouts(
+        baseLayout: CustomElement<TApp>,
+        subLayouts:
+            readonly SubLayoutConfig<TApp>[],
+    ): Promise<CustomElement<TApp>> {
+        let renderRoot = baseLayout;
+
+        for (
+            const [index, subLayout]
+            of subLayouts.entries()
+        ) {
+            const targetContainer =
+                this._findLayoutTarget(
+                    renderRoot,
+                    subLayout.target,
+                );
+
+            if (!targetContainer) {
+                throw new Error(
+                    `Failed to find sublayout target ` +
+                    `'${subLayout.target}' for ` +
+                    `'${subLayout.layout.tagName}'.`,
+                );
+            }
+
+            const activeSubLayout =
+                this._activeSubLayouts[index];
+            const canReuse =
+                activeSubLayout !== undefined &&
+                activeSubLayout.target ===
+                    subLayout.target &&
+                activeSubLayout.layout ===
+                    subLayout.layout &&
+                activeSubLayout.container ===
+                    targetContainer &&
+                activeSubLayout.element.isConnected &&
+                activeSubLayout.element.parentElement ===
+                    targetContainer;
+
+            if (canReuse) {
+                await activeSubLayout.element
+                    .initComplete;
+                renderRoot =
+                    activeSubLayout.element;
+                continue;
+            }
+
+            this._clearSubLayoutsFrom(index);
+
+            const hashId = this.app.generateHash();
+
+            this.app.originalInnerHTML.call(
+                targetContainer,
+                subLayout.layout.generate(hashId),
+            );
+
+            const subLayoutElement =
+                targetContainer.querySelector(
+                    `[data-hash-id="${hashId}"]`,
+                ) as CustomElement<TApp> | null;
+
+            if (!subLayoutElement) {
+                throw new Error(
+                    `Failed to render sublayout ` +
+                    `'${subLayout.layout.tagName}' in ` +
+                    `'${subLayout.target}'.`,
+                );
+            }
+
+            subLayoutElement.setAttribute(
+                "data-jolt-router-layout",
+                "",
+            );
+            subLayoutElement.setAttribute(
+                "data-jolt-layout-depth",
+                String(index),
+            );
+
+            await subLayoutElement.initComplete;
+
+            this._activeSubLayouts.push({
+                target: subLayout.target,
+                layout: subLayout.layout,
+                container: targetContainer,
+                element: subLayoutElement,
+            });
+            renderRoot = subLayoutElement;
+        }
+
+        if (
+            this._activeSubLayouts.length >
+            subLayouts.length
+        ) {
+            this._clearSubLayoutsFrom(
+                subLayouts.length,
+            );
+        }
+
+        return renderRoot;
+    }
+
+    protected _clearSubLayoutsFrom(
+        index: number,
+    ): void {
+        const firstRemovedLayout =
+            this._activeSubLayouts[index];
+
+        if (firstRemovedLayout) {
+            this.app.originalInnerHTML.call(
+                firstRemovedLayout.container,
+                "",
+            );
+        }
+
+        this._activeSubLayouts.splice(index);
+    }
+
+    protected _findLayoutTarget(
+        root: CustomElement<TApp>,
+        selector: string,
+    ): Element | null {
+        if (root.matches(selector)) {
+            return root;
+        }
+
+        return root.querySelector(selector);
+    }
+
     protected _renderLayout = async (
         layout: CustomElementClass<TApp>,
     ): Promise<void> => {
-        if (this.app.querySelector(layout.tagName)) {
+        const existingLayout = Array.from(
+            this.app.container.children,
+        ).find(
+            element =>
+                element instanceof layout,
+        ) as CustomElement<TApp> | undefined;
+
+        if (existingLayout) {
+            await existingLayout.initComplete;
             return;
         }
 
@@ -680,11 +881,14 @@ class Router<TApp extends App> {
             this.app.container,
             layout.generate(),
         );
+        this._activeSubLayouts = [];
 
-        const layoutElement =
-            this.app.querySelector(
-                layout.tagName,
-            ) as CustomElement<TApp> | null;
+        const layoutElement = Array.from(
+            this.app.container.children,
+        ).find(
+            element =>
+                element instanceof layout,
+        ) as CustomElement<TApp> | undefined;
 
         if (!layoutElement) {
             throw new Error(

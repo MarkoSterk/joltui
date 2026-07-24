@@ -1,9 +1,12 @@
 import { CustomElement, auth, component, html, page } from "joltui";
 import type FieldnotesApp from "../app.js";
 import type { DemoUser } from "../types.js";
+import ProfileSublayout from "../layouts/profileSublayout.js";
 
 @auth()
-@page({ path: "/profile", title: "ecris.frontend.pages.profile" })
+@page({ path: "/profile", title: "ecris.frontend.pages.profile", subLayouts: [
+    {target: "#page-content", layout: ProfileSublayout}
+], target: "#subcontent" })
 @component({ tagName: "profile-page" })
 export default class ProfilePage extends CustomElement<FieldnotesApp> {
     get user(): DemoUser {

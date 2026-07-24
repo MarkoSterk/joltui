@@ -14,10 +14,6 @@ export default class BlogErrorHandler extends ErrorHandler<FieldnotesApp> {
         //await this.app.router.redirect("/login");
         await this.app.router.redirect(`/login?target=${error.path}`);
     }
-    @handles(AuthorizationError)
-    async authorizationError(error: AuthorizationError){
-        //naredi kaj hočes
-    }
 
     @handles(RouteNotFoundError)
     async routeNotFound(): Promise<void> {

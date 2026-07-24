@@ -55,6 +55,27 @@ function assertPageConfigs(configs) {
     }
     assertOptionalName(configs.title, "title");
     assertOptionalName(configs.target, "target");
+    if (configs.subLayouts !== undefined &&
+        configs.subLayouts !== null) {
+        if (!Array.isArray(configs.subLayouts)) {
+            throw new TypeError("Page subLayouts must be an array, null, or undefined.");
+        }
+        for (const [index, subLayout] of configs.subLayouts.entries()) {
+            if (!subLayout ||
+                typeof subLayout !== "object") {
+                throw new TypeError(`Page subLayouts[${index}] must be an object.`);
+            }
+            if (typeof subLayout.target !== "string" ||
+                subLayout.target.trim().length === 0) {
+                throw new TypeError(`Page subLayouts[${index}].target must be ` +
+                    "a non-empty selector.");
+            }
+            if (typeof subLayout.layout !== "function") {
+                throw new TypeError(`Page subLayouts[${index}].layout must be ` +
+                    "a CustomElement class.");
+            }
+        }
+    }
     if (configs.extras !== undefined &&
         configs.extras !== null &&
         (typeof configs.extras !== "object" ||
@@ -144,6 +165,10 @@ export function page(pathOrConfigs) {
             kind: "page",
             path: configs.path,
             layout: configs.layout ?? null,
+            subLayouts: Object.freeze((configs.subLayouts ?? []).map(subLayout => Object.freeze({
+                target: subLayout.target,
+                layout: subLayout.layout,
+            }))),
             title: configs.title ?? null,
             target: configs.target ?? null,
             extras: Object.freeze({

@@ -3,7 +3,7 @@ export type { AppConfig, AppContainer, AppDataChangeDetail, AppDataChangeEvent, 
 export { component, page, layout, getElementMetadata, requireElementMetadata, } from "./elementMetadata.js";
 export { default as CustomElement, html } from "./customElement.js";
 export type { CustomElementClass, FetchHtmlRequest, } from "./customElement.js";
-export type { ElementKind, ElementMetadata, ComponentConfigs, ComponentMetadata, PageConfigs, PageMetadata, LayoutMetadata, AuthenticationMetadata, } from "./elementMetadata.js";
+export type { ElementKind, ElementMetadata, ComponentConfigs, ComponentMetadata, PageConfigs, PageMetadata, LayoutMetadata, AuthenticationMetadata, SubLayoutConfig, } from "./elementMetadata.js";
 export { default as Router, routeEventsEnum, } from "./router.js";
 export { auth } from "./auth.js";
 export type { Authentication, Route, RouteExtras, RouteParameters, ParsedRoute, MatchedRoute, RouterConfig, RedirectOptions, HandlerArgs, } from "./router.js";

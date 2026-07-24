@@ -1,6 +1,6 @@
 import App from "./app.js";
-import { type CustomElementClass } from "./customElement.js";
-import { type PageMetadata } from "./elementMetadata.js";
+import { CustomElement, type CustomElementClass } from "./customElement.js";
+import { type PageMetadata, type SubLayoutConfig } from "./elementMetadata.js";
 export declare const routeEventsEnum: {
     readonly START: "route-change.start";
     readonly FINISHED: "route-change.finished";
@@ -36,6 +36,7 @@ export type Route<TApp extends App = App> = {
     handler: CustomElementClass<TApp>;
     target: string;
     layout: CustomElementClass<TApp>;
+    subLayouts: readonly SubLayoutConfig<TApp>[];
     title: string | null;
     extras: RouteExtras;
     authentication: Authentication | null;
@@ -45,6 +46,7 @@ export type ParsedRoute<TApp extends App = App> = {
     handler: CustomElementClass<TApp>;
     target: string;
     layout: CustomElementClass<TApp>;
+    subLayouts: readonly SubLayoutConfig<TApp>[];
     title: string | null;
     extras: RouteExtras;
     authentication: Authentication | null;
@@ -75,6 +77,12 @@ type ScrollPosition = {
 type CurrentState = {
     scrollPosition: ScrollPosition;
 };
+type ActiveSubLayout<TApp extends App = App> = {
+    target: string;
+    layout: CustomElementClass<TApp>;
+    container: Element;
+    element: CustomElement<TApp>;
+};
 declare class Router<TApp extends App> {
     protected readonly _app: TApp;
     protected readonly _baseLayout: CustomElementClass<TApp>;
@@ -86,6 +94,7 @@ declare class Router<TApp extends App> {
     protected _currentRoute: MatchedRoute<TApp> | null;
     protected _routeParameters: RouteParameters;
     protected _inTransition: boolean;
+    protected _activeSubLayouts: ActiveSubLayout<TApp>[];
     constructor({ baseUrl, baseLayout, defaultTarget, indexRoute, app, }: RouterConfig<TApp>);
     isAuthenticated(): MaybePromise<boolean>;
     checkUserRoles(_roles: unknown[]): MaybePromise<boolean>;
@@ -101,6 +110,9 @@ declare class Router<TApp extends App> {
     protected _clickHandler: (event: MouseEvent) => Promise<void>;
     route: () => Promise<void>;
     protected _loadPath: (matchedPath: MatchedRoute<TApp>) => Promise<void>;
+    protected _renderSubLayouts(baseLayout: CustomElement<TApp>, subLayouts: readonly SubLayoutConfig<TApp>[]): Promise<CustomElement<TApp>>;
+    protected _clearSubLayoutsFrom(index: number): void;
+    protected _findLayoutTarget(root: CustomElement<TApp>, selector: string): Element | null;
     protected _renderLayout: (layout: CustomElementClass<TApp>) => Promise<void>;
     protected _setTitle(tagName: string, title: string | null): Promise<void>;
     setTitle(title: string): Promise<void>;

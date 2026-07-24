@@ -13,9 +13,14 @@ export type AuthenticationMetadata = Readonly<{
     authenticationRequired: boolean;
     rolesRequired: readonly unknown[];
 }>;
+export type SubLayoutConfig<TApp extends App = App> = Readonly<{
+    target: string;
+    layout: CustomElementClass<TApp>;
+}>;
 export type PageConfigs<TApp extends App = App> = {
     path: string;
     layout?: CustomElementClass<TApp> | null;
+    subLayouts?: readonly SubLayoutConfig<TApp>[] | null;
     title?: string | null;
     target?: string | null;
     extras?: Record<string, unknown> | null;
@@ -40,6 +45,7 @@ export type PageMetadata<TApp extends App = App> = BaseElementMetadata & Readonl
     kind: "page";
     path: string;
     layout: CustomElementClass<TApp> | null;
+    subLayouts: readonly SubLayoutConfig<TApp>[];
     title: string | null;
     target: string | null;
     extras: Readonly<Record<string, unknown>>;

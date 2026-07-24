@@ -55,6 +55,7 @@ class Router {
     _currentRoute = null;
     _routeParameters = {};
     _inTransition = false;
+    _activeSubLayouts = [];
     constructor({ baseUrl = "", baseLayout, defaultTarget, indexRoute = "/", app, }) {
         if (!app) {
             throw new Error("Missing application object in router constructor");
@@ -120,12 +121,28 @@ class Router {
             throw new Error(`Page layout '${layout.name}' is not registered ` +
                 `in app.elements.`);
         }
+        for (const [index, subLayout] of metadata.subLayouts.entries()) {
+            if (!isCustomElementClass(subLayout.layout)) {
+                throw new TypeError(`Invalid sublayout at index ${index} ` +
+                    `configured for page '${handler.name}'.`);
+            }
+            const subLayoutMetadata = requireElementMetadata(subLayout.layout);
+            if (subLayoutMetadata.kind !== "layout") {
+                throw new TypeError(`Page sublayout '${subLayout.layout.name}' ` +
+                    "must use @layout.");
+            }
+            if (!this.app.elements.includes(subLayout.layout)) {
+                throw new Error(`Page sublayout '${subLayout.layout.name}' ` +
+                    "is not registered in app.elements.");
+            }
+        }
         return {
             path: this._joinBaseUrl(metadata.path),
             handler,
             target: metadata.target ??
                 this._defaultTarget,
             layout,
+            subLayouts: metadata.subLayouts,
             title: metadata.title,
             extras: metadata.extras,
             authentication: metadata.authentication,
@@ -142,6 +159,7 @@ class Router {
                 handler: route.handler,
                 target: route.target,
                 layout: route.layout,
+                subLayouts: route.subLayouts,
                 title: route.title,
                 extras: route.extras,
                 authentication: route.authentication,
@@ -292,12 +310,14 @@ class Router {
     _loadPath = async (matchedPath) => {
         this._emitRouteEvent(routeEventsEnum.START);
         await this._renderLayout(matchedPath.layout);
-        const layout = this.app.querySelector(matchedPath.layout.tagName);
+        const layout = Array.from(this.app.container.children).find(element => element instanceof
+            matchedPath.layout);
         if (!layout) {
             throw new Error(`Failed to render layout '${matchedPath.layout.tagName}'.`);
         }
         await layout.initComplete;
-        const targetContainer = this.app.querySelector(matchedPath.target);
+        const pageRoot = await this._renderSubLayouts(layout, matchedPath.subLayouts);
+        const targetContainer = this._findLayoutTarget(pageRoot, matchedPath.target);
         if (!targetContainer) {
             throw new Error(`Failed to find route target '${matchedPath.target}'.`);
         }
@@ -311,12 +331,81 @@ class Router {
         this.currentRoute = matchedPath;
         this._emitRouteEvent(routeEventsEnum.FINISHED);
     };
+    async _renderSubLayouts(baseLayout, subLayouts) {
+        let renderRoot = baseLayout;
+        for (const [index, subLayout] of subLayouts.entries()) {
+            const targetContainer = this._findLayoutTarget(renderRoot, subLayout.target);
+            if (!targetContainer) {
+                throw new Error(`Failed to find sublayout target ` +
+                    `'${subLayout.target}' for ` +
+                    `'${subLayout.layout.tagName}'.`);
+            }
+            const activeSubLayout = this._activeSubLayouts[index];
+            const canReuse = activeSubLayout !== undefined &&
+                activeSubLayout.target ===
+                    subLayout.target &&
+                activeSubLayout.layout ===
+                    subLayout.layout &&
+                activeSubLayout.container ===
+                    targetContainer &&
+                activeSubLayout.element.isConnected &&
+                activeSubLayout.element.parentElement ===
+                    targetContainer;
+            if (canReuse) {
+                await activeSubLayout.element
+                    .initComplete;
+                renderRoot =
+                    activeSubLayout.element;
+                continue;
+            }
+            this._clearSubLayoutsFrom(index);
+            const hashId = this.app.generateHash();
+            this.app.originalInnerHTML.call(targetContainer, subLayout.layout.generate(hashId));
+            const subLayoutElement = targetContainer.querySelector(`[data-hash-id="${hashId}"]`);
+            if (!subLayoutElement) {
+                throw new Error(`Failed to render sublayout ` +
+                    `'${subLayout.layout.tagName}' in ` +
+                    `'${subLayout.target}'.`);
+            }
+            subLayoutElement.setAttribute("data-jolt-router-layout", "");
+            subLayoutElement.setAttribute("data-jolt-layout-depth", String(index));
+            await subLayoutElement.initComplete;
+            this._activeSubLayouts.push({
+                target: subLayout.target,
+                layout: subLayout.layout,
+                container: targetContainer,
+                element: subLayoutElement,
+            });
+            renderRoot = subLayoutElement;
+        }
+        if (this._activeSubLayouts.length >
+            subLayouts.length) {
+            this._clearSubLayoutsFrom(subLayouts.length);
+        }
+        return renderRoot;
+    }
+    _clearSubLayoutsFrom(index) {
+        const firstRemovedLayout = this._activeSubLayouts[index];
+        if (firstRemovedLayout) {
+            this.app.originalInnerHTML.call(firstRemovedLayout.container, "");
+        }
+        this._activeSubLayouts.splice(index);
+    }
+    _findLayoutTarget(root, selector) {
+        if (root.matches(selector)) {
+            return root;
+        }
+        return root.querySelector(selector);
+    }
     _renderLayout = async (layout) => {
-        if (this.app.querySelector(layout.tagName)) {
+        const existingLayout = Array.from(this.app.container.children).find(element => element instanceof layout);
+        if (existingLayout) {
+            await existingLayout.initComplete;
             return;
         }
         this.app.originalInnerHTML.call(this.app.container, layout.generate());
-        const layoutElement = this.app.querySelector(layout.tagName);
+        this._activeSubLayouts = [];
+        const layoutElement = Array.from(this.app.container.children).find(element => element instanceof layout);
         if (!layoutElement) {
             throw new Error(`Failed to generate layout '${layout.tagName}'.`);
         }
