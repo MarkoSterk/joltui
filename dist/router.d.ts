@@ -70,6 +70,12 @@ export type RedirectOptions = {
     useBaseUrl?: boolean;
     baseParameters?: RouteParameters;
 };
+type RouteSpecificity = {
+    segments: readonly number[];
+    literalCount: number;
+    parameterCount: number;
+    integerParameterCount: number;
+};
 type ScrollPosition = {
     x: number;
     y: number;
@@ -106,6 +112,7 @@ declare class Router<TApp extends App> {
     protected _normalizeBaseUrl(baseUrl: string): string;
     protected _joinBaseUrl(path: string): string;
     protected _sortRoutes(routeMap: Map<string, ParsedRoute<TApp>>): Map<string, ParsedRoute<TApp>>;
+    protected _getRouteSpecificity(path: string): RouteSpecificity;
     protected _popStateHandler: (event: PopStateEvent) => Promise<void>;
     protected _clickHandler: (event: MouseEvent) => Promise<void>;
     route: () => Promise<void>;

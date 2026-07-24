@@ -215,22 +215,77 @@ class Router {
         return this._normalizePath(`${this._baseUrl}/${normalizedPath}`);
     }
     _sortRoutes(routeMap) {
-        const sortedRoutes = Array.from(routeMap.entries()).sort(([firstPath], [secondPath]) => {
-            const lengthDifference = secondPath.length - firstPath.length;
-            if (lengthDifference !== 0) {
-                return lengthDifference;
+        const sortedRoutes = Array.from(routeMap.entries())
+            .map((entry, index) => ({
+            entry,
+            index,
+            specificity: this._getRouteSpecificity(entry[0]),
+        }))
+            .sort((first, second) => {
+            const literalDifference = second.specificity.literalCount -
+                first.specificity.literalCount;
+            if (literalDifference !== 0) {
+                return literalDifference;
             }
-            if (firstPath.includes("<str:") &&
-                secondPath.includes("<int:")) {
-                return -1;
+            const parameterDifference = first.specificity.parameterCount -
+                second.specificity.parameterCount;
+            if (parameterDifference !== 0) {
+                return parameterDifference;
             }
-            if (firstPath.includes("<int:") &&
-                secondPath.includes("<str:")) {
-                return 1;
+            const integerParameterDifference = second.specificity
+                .integerParameterCount -
+                first.specificity
+                    .integerParameterCount;
+            if (integerParameterDifference !== 0) {
+                return integerParameterDifference;
             }
-            return 0;
-        });
+            const sharedSegmentCount = Math.min(first.specificity.segments.length, second.specificity.segments.length);
+            for (let index = 0; index < sharedSegmentCount; index += 1) {
+                const segmentDifference = (second.specificity
+                    .segments[index] ?? 0) -
+                    (first.specificity
+                        .segments[index] ?? 0);
+                if (segmentDifference !== 0) {
+                    return segmentDifference;
+                }
+            }
+            const segmentCountDifference = second.specificity.segments.length -
+                first.specificity.segments.length;
+            if (segmentCountDifference !== 0) {
+                return segmentCountDifference;
+            }
+            return first.index - second.index;
+        })
+            .map(({ entry }) => entry);
         return new Map(sortedRoutes);
+    }
+    _getRouteSpecificity(path) {
+        const routeParameterPattern = /^<(str|int):([A-Za-z_]\w*)>$/;
+        const segments = this._normalizePath(path)
+            .split("/")
+            .filter(Boolean);
+        let literalCount = 0;
+        let parameterCount = 0;
+        let integerParameterCount = 0;
+        const segmentSpecificity = segments.map(segment => {
+            const parameterMatch = routeParameterPattern.exec(segment);
+            if (!parameterMatch) {
+                literalCount += 1;
+                return 3;
+            }
+            parameterCount += 1;
+            if (parameterMatch[1] === "int") {
+                integerParameterCount += 1;
+                return 2;
+            }
+            return 1;
+        });
+        return {
+            segments: segmentSpecificity,
+            literalCount,
+            parameterCount,
+            integerParameterCount,
+        };
     }
     _popStateHandler = async (event) => {
         await this.route();

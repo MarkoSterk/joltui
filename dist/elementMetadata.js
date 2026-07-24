@@ -166,7 +166,8 @@ export function page(pathOrConfigs) {
             path: configs.path,
             layout: configs.layout ?? null,
             subLayouts: Object.freeze((configs.subLayouts ?? []).map(subLayout => Object.freeze({
-                target: subLayout.target,
+                target: subLayout.target
+                    .trim(),
                 layout: subLayout.layout,
             }))),
             title: configs.title ?? null,
