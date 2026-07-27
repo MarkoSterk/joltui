@@ -1139,6 +1139,12 @@ class App<
         );
     }
 
+    setQueryParameters(params: Record<
+            string, string
+        >,): void{
+        this.queryParameters = params;
+    }
+
     updateQueryParameters(
         params: Record<
             string,
