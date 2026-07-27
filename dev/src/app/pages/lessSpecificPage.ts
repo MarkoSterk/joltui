@@ -1,7 +1,7 @@
 import { component, CustomElement, page } from "joltui";
 import type FieldnotesApp from "../app";
 
-@page("/something/<str:pageName>")
+@page("/<str:pageName>")
 @component({tagName: "less-specific-page"})
 export default class LessSpecificPage extends CustomElement<FieldnotesApp>{
     override markup = () => {
