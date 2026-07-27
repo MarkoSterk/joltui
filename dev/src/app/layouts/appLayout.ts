@@ -29,6 +29,9 @@ export default class AppLayout extends CustomElement<FieldnotesApp> {
                                 <li class="nav-item"><a class="nav-link" href="/">Stories</a></li>
                                 <li class="nav-item"><a class="nav-link" href="/about">About</a></li>
                                 <li class="nav-item"><a class="nav-link" href="/drafts">Drafts</a></li>
+                                <li class="nav-item"><a class="nav-link" href="/something/specific">Specific</a></li>
+                                <li class="nav-item"><a class="nav-link" href="/something/fuu">Fuu</a></li>
+                                <li class="nav-item"><a class="nav-link" href="/something/bar">Bar</a></li>
                             </ul>
 
                             <div class="navbar-actions" data-bind="app.user">

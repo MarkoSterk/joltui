@@ -9,6 +9,8 @@ import LoginPage from "./pages/loginPage.js";
 import PostPage from "./pages/postPage.js";
 import ProfilePage from "./pages/profilePage.js";
 import ProfileBilling from "./pages/profileBilling.js";
+import MoreSpecificPage from "./pages/moreSpecificPage.js";
+import LessSpecificPage from "./pages/lessSpecificPage.js";
 
 export default [
     AppLayout,
@@ -22,4 +24,6 @@ export default [
     ProfileBilling,
     DraftsPage,
     NotFoundPage,
+    MoreSpecificPage,
+    LessSpecificPage
 ] as const;
