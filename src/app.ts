@@ -340,11 +340,11 @@ class App<
         this._errorHandlerInstances = this._initializeErrorHandlers();
 
         await this._runLifecycleStage(
-            Lifecycle.EXTENSION_INIT,
+            Lifecycle.BEFORE_INIT,
         );
 
         await this._runLifecycleStage(
-            Lifecycle.BEFORE_INIT,
+            Lifecycle.EXTENSION_INIT,
         );
 
         this._router =
