@@ -493,6 +493,9 @@ class App {
         history.pushState(history.state, "", url);
         this._emitQueryParameterChanges(changedParameterNames);
     }
+    setQueryParameters(params) {
+        this.queryParameters = params;
+    }
     updateQueryParameters(params) {
         const url = new URL(location.href);
         const previousParameters = new URLSearchParams(url.search);
@@ -510,9 +513,12 @@ class App {
         history.pushState(history.state, "", url);
         this._emitQueryParameterChanges(changedParameterNames);
     }
-    createQueryParametersString(params) {
+    createQueryParametersString(params, exclude) {
         const searchParams = new URLSearchParams();
         for (const [key, value] of Object.entries(params)) {
+            if (exclude && exclude.includes(key)) {
+                continue;
+            }
             searchParams.set(key, String(value));
         }
         return searchParams.toString();

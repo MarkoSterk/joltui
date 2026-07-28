@@ -1197,6 +1197,7 @@ class App<
             string,
             string | number
         >,
+        exclude?: string[]
     ): string {
         const searchParams =
             new URLSearchParams();
@@ -1205,6 +1206,9 @@ class App<
             const [key, value]
             of Object.entries(params)
         ) {
+            if(exclude && exclude.includes(key)){
+                continue;
+            }
             searchParams.set(
                 key,
                 String(value),

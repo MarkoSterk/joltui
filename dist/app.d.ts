@@ -110,8 +110,9 @@ declare class App<TApp extends App<TApp> = any> {
     get originalInsertAdjacentHTML(): typeof Element.prototype.insertAdjacentHTML;
     get queryParameters(): Record<string, string>;
     set queryParameters(params: Record<string, string>);
+    setQueryParameters(params: Record<string, string>): void;
     updateQueryParameters(params: Record<string, string | number | null>): void;
-    createQueryParametersString(params: Record<string, string | number>): string;
+    createQueryParametersString(params: Record<string, string | number>, exclude?: string[]): string;
     getTemplateCacheKey(tagName: string, args?: Record<string, unknown>): string;
     setCachedTemplate(key: string, template: string, duration: number): void;
     getCachedTemplate(key: string): string | null;
