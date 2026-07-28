@@ -136,8 +136,8 @@ class App {
         this.registerCustomElements(this.elements);
         this._modifyPrototypeMethods();
         this._errorHandlerInstances = this._initializeErrorHandlers();
-        await this._runLifecycleStage(Lifecycle.EXTENSION_INIT);
         await this._runLifecycleStage(Lifecycle.BEFORE_INIT);
+        await this._runLifecycleStage(Lifecycle.EXTENSION_INIT);
         this._router =
             this.routerGenerator();
         if (this._router) {
