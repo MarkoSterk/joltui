@@ -1,3 +1,4 @@
+import App, { type AppContainer } from "./app.js";
 import {
     HttpRequestError,
     JsonResponseError,
@@ -81,36 +82,42 @@ export default class RequestHelper {
     ): Promise<TResponse> {
         let response: Response;
 
+        const appElement = document.querySelector('[app-id]') as AppContainer;
+        const app = appElement.app;
+
         try {
             response = await fetch(input, {
                 ...init,
                 method,
             });
-        } catch (error: unknown) {
-            throw new NetworkError(
+        } catch (e: unknown) {
+            const error = new NetworkError(
                 `Failed to execute ${method} request ` +
                 `to '${this.getRequestUrl(input)}'.`,
-                { cause: error },
+                { cause: e },
             );
+            return await this.handleError(app, error);
         }
 
         if (!response.ok) {
-            throw new HttpRequestError(
+            const error = new HttpRequestError(
                 method,
                 response,
             );
+            return await this.handleError(app, error);
         }
 
         let responseText: string;
 
         try {
             responseText = await response.text();
-        } catch (error: unknown) {
-            throw new JsonResponseError(
+        } catch (e: unknown) {
+            const error = new JsonResponseError(
                 method,
                 response,
-                { cause: error },
+                { cause: e },
             );
+            return await this.handleError(app, error);
         }
 
         if (responseText.trim().length === 0) {
@@ -119,13 +126,24 @@ export default class RequestHelper {
 
         try {
             return JSON.parse(responseText) as TResponse;
-        } catch (error: unknown) {
-            throw new JsonResponseError(
+        } catch (e: unknown) {
+            const error = new JsonResponseError(
                 method,
                 response,
-                { cause: error },
+                { cause: e },
             );
+            return await this.handleError(app, error);
         }
+    }
+
+    protected static async handleError<
+        TResponse = unknown,
+    >(app: App, error: Error): Promise<TResponse>{
+        if(!app){
+            throw error;
+        }
+        await app.handleError(error);
+        return null as TResponse;;
     }
 
     protected static getRequestUrl(

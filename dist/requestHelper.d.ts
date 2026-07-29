@@ -1,3 +1,4 @@
+import App from "./app.js";
 export type RequestOptions = Omit<RequestInit, "method">;
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export default class RequestHelper {
@@ -7,6 +8,7 @@ export default class RequestHelper {
     static patch<TResponse = unknown>(input: RequestInfo | URL, init?: RequestOptions): Promise<TResponse>;
     static delete<TResponse = unknown>(input: RequestInfo | URL, init?: RequestOptions): Promise<TResponse>;
     protected static request<TResponse = unknown>(method: HttpMethod, input: RequestInfo | URL, init?: RequestOptions): Promise<TResponse>;
+    protected static handleError<TResponse = unknown>(app: App, error: Error): Promise<TResponse>;
     protected static getRequestUrl(input: RequestInfo | URL): string;
 }
 export {};

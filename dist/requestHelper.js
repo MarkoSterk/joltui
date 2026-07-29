@@ -1,3 +1,4 @@
+import App, {} from "./app.js";
 import { HttpRequestError, JsonResponseError, NetworkError, } from "./errors.js";
 export default class RequestHelper {
     static get(input, init) {
@@ -17,25 +18,30 @@ export default class RequestHelper {
     }
     static async request(method, input, init) {
         let response;
+        const appElement = document.querySelector('[app-id]');
+        const app = appElement.app;
         try {
             response = await fetch(input, {
                 ...init,
                 method,
             });
         }
-        catch (error) {
-            throw new NetworkError(`Failed to execute ${method} request ` +
-                `to '${this.getRequestUrl(input)}'.`, { cause: error });
+        catch (e) {
+            const error = new NetworkError(`Failed to execute ${method} request ` +
+                `to '${this.getRequestUrl(input)}'.`, { cause: e });
+            return await this.handleError(app, error);
         }
         if (!response.ok) {
-            throw new HttpRequestError(method, response);
+            const error = new HttpRequestError(method, response);
+            return await this.handleError(app, error);
         }
         let responseText;
         try {
             responseText = await response.text();
         }
-        catch (error) {
-            throw new JsonResponseError(method, response, { cause: error });
+        catch (e) {
+            const error = new JsonResponseError(method, response, { cause: e });
+            return await this.handleError(app, error);
         }
         if (responseText.trim().length === 0) {
             return null;
@@ -43,9 +49,18 @@ export default class RequestHelper {
         try {
             return JSON.parse(responseText);
         }
-        catch (error) {
-            throw new JsonResponseError(method, response, { cause: error });
+        catch (e) {
+            const error = new JsonResponseError(method, response, { cause: e });
+            return await this.handleError(app, error);
         }
+    }
+    static async handleError(app, error) {
+        if (!app) {
+            throw error;
+        }
+        await app.handleError(error);
+        return null;
+        ;
     }
     static getRequestUrl(input) {
         if (input instanceof Request) {
