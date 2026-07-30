@@ -483,6 +483,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             throw new Error("If using server components you need to provide the 'serverComponentsUrl' property at application initialization.")
         }
         try{
+            const url = `${this.app.serverComponentsUrl}?${this.app.createQueryParametersString(this.app.queryParameters)}`;
             let response = await fetch(this.app.serverComponentsUrl, {
                 method: "POST",
                 headers: {
