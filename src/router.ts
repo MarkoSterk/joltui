@@ -1001,7 +1001,9 @@ class Router<TApp extends App> {
     ): Promise<void> {
         
         const titleCandidate: string|null = await this.titleGenerator(tagName, title) || title;
-        this.setTitle(titleCandidate || this.app.appName);
+        if(titleCandidate){
+            this.setTitle(titleCandidate);
+        }
     }
 
     async setTitle(title: string){
@@ -1013,7 +1015,7 @@ class Router<TApp extends App> {
                 document.createElement("title");
             document.head.prepend(titleElement);
         }
-        titleElement.innerText = title;
+        titleElement.innerText = title == "_default" ? this.app.appName : title;
     }
 
     protected _emitRouteEvent(
