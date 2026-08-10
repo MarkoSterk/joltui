@@ -469,7 +469,9 @@ class Router {
     };
     async _setTitle(tagName, title) {
         const titleCandidate = await this.titleGenerator(tagName, title) || title;
-        this.setTitle(titleCandidate || this.app.appName);
+        if (titleCandidate) {
+            this.setTitle(titleCandidate);
+        }
     }
     async setTitle(title) {
         let titleElement = document.head.querySelector("title");
@@ -478,7 +480,7 @@ class Router {
                 document.createElement("title");
             document.head.prepend(titleElement);
         }
-        titleElement.innerText = title;
+        titleElement.innerText = title == "_default" ? this.app.appName : title;
     }
     _emitRouteEvent(eventType) {
         this.app.container.dispatchEvent(new CustomEvent(eventType, {
