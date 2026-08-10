@@ -185,7 +185,8 @@ class CounterButton extends CustomElement {
 }
 ```
 
-Event attributes written as `@click="methodName"` are connected to methods on the component. The equivalent expanded form is `jolt-click="methodName"`.
+Event attributes written as `@click="methodName"` are connected to methods on the component. The equivalent expanded form is `jolt-click="methodName"`. This uses a manual rerender call which should ideally be avoided. Any markup changes
+because of property value updates should be handled via the "@react" annotation or "data-bind" attributes. See examples below.
 
 ## Application data and partial updates
 
@@ -231,7 +232,7 @@ override markup = () => html`
 `;
 ```
 
-`@reactFactory` provides a fresh initial value for each instance and is useful for arrays and objects.
+`@react (via reactFactory)` provides a fresh initial value for each instance and is useful for arrays and objects.
 
 ## Query parameters
 
@@ -567,6 +568,8 @@ JoltUI sends a JSON `POST` request containing:
     attributes: {/* custom attributes (prefix: data-jolt-*) on the current element  */}
 }
 ```
+
+to the endpoint [POST] /api/components?<queryParameters>
 
 Override `fetchHTML(request)` when custom request behavior is required.
 
