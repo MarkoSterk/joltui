@@ -18,7 +18,7 @@ import {
     requireElementMetadata,
     type ElementMetadata,
 } from "./elementMetadata.js";
-import { AuthenticationError, AuthorizationError, InternalServerError, NetworkError, ServerComponentNotFound } from "./errors.js";
+import { AuthenticationError, AuthorizationError, InternalServerError, NetworkError, ServerComponentNotFound, ServerComponentBadRequestResponse } from "./errors.js";
 
 export class RenderError extends Error {
     protected readonly elementName: string;
@@ -479,42 +479,89 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     }
 
     fetchHTML = async (request: FetchHtmlRequest): Promise<string> => {
-        if(!this.app.serverComponentsUrl){
-            throw new Error("If using server components you need to provide the 'serverComponentsUrl' property at application initialization.")
+        if (!this.app.serverComponentsUrl) {
+            throw new Error(
+                "If using server components you need to provide the " +
+                "'serverComponentsUrl' property at application initialization."
+            );
         }
-        try{
-            const url = `${this.app.serverComponentsUrl}?${this.app.createQueryParametersString(this.app.queryParameters)}`;
-            let response = await fetch(this.app.serverComponentsUrl, {
+        let response: Response;
+        try {
+            response = await fetch(this.app.serverComponentsUrl, {
                 method: "POST",
+                credentials: "include",
                 headers: {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    
                 },
                 body: JSON.stringify(request)
-            })
-            if(!response.ok){
-                if(response.status == 400){
-                    throw new Error("Bad request. Component request object is required.")
-                }
-                if(response.status == 401){
-                    throw new AuthenticationError("Missing authentication for requested route");
-                }
-                if(response.status == 403){
-                    throw new AuthorizationError("User is not authorized for this route", []);
-                }
-                if(response.status == 404){
-                    throw new ServerComponentNotFound(this.tagName.toLowerCase(), this.groupName || "default")
-                }
-                if(response.status == 500){
-                    throw new InternalServerError("Something went wrong on the server during component content fetch");
-                }
+            });
+        } catch {
+            throw new NetworkError(
+                "Failed to fetch requested content. Server unresponsive."
+            );
+        }
+        if (!response.ok) {
+            return await this._checkFetchHTMLError(response);
+        }
+        try {
+            const text = await response.text();
+            if(text.trim().length === 0){
+                throw new MarkupFetchError(
+                    "Fetched HTML markup was empty for a 2xx response.",
+                    this.tagName
+                );
             }
+            return text;
+        } catch(error: unknown){
+            if (error instanceof MarkupFetchError) {
+                throw error;
+            }
+            throw new MarkupFetchError(
+                "Failed to read fetched html markup for 2xx responses.",
+                this.tagName
+            );
+        }
+    };
+
+    _checkFetchHTMLError = async (response: Response): Promise<string> => {
+        const contentType = response.headers.get("content-type") ?? "";
+        if (contentType.includes("text/html")) {
             try{
-                return await response.text();
-            }catch(e: unknown){
-                throw new MarkupFetchError("Failed to parse fetched html markup.", this.tagName);
+                const text = await response.text();
+                if (text.trim().length === 0) {
+                    throw new MarkupFetchError(
+                        "Fetched HTML markup was empty for a non-2xx response.",
+                        this.tagName
+                    );
+                }
+                return text;
+            } catch(error: unknown){
+                if (error instanceof MarkupFetchError) {
+                    throw error;
+                }
+                throw new MarkupFetchError(
+                    "Failed to read fetched html markup for non-2xx responses.",
+                    this.tagName
+                );
             }
-        }catch(e: unknown){
-            throw new NetworkError("Failed to fetch requested content. Server unresponsive.");
+        }
+        if(response.status >= 500){
+            throw new InternalServerError(`Server component fetch failed with status ${response.status}`);
+        }
+        switch(response.status){
+            // Non-HTML error responses are converted to status-specific errors.
+            case 400:
+                throw new ServerComponentBadRequestResponse(this.tagName.toLowerCase(), this.groupName || "default");
+            case 401:   
+                throw new AuthenticationError("Missing authentication for requested route");
+            case 403:
+                throw new AuthorizationError("User is not authorized for this route", []);
+            case 404:
+                throw new ServerComponentNotFound(this.tagName.toLowerCase(), this.groupName || "default")
+            default:
+                //throw generic error with response code
+                throw new Error(`Failed to fetch component content. Server responded with status ${response.status}`);
         }
     }
 

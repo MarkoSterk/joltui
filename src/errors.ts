@@ -74,6 +74,17 @@ class ServerComponentNotFound extends Error{
     }
 }
 
+class ServerComponentBadRequestResponse extends Error{
+    protected readonly tagName: string;
+    protected readonly groupName: string;
+    constructor(tagName: string, groupName: string){
+        super(`Server component with tagName '${tagName}' in group '${groupName}' returned a bad request response.`);
+        this.tagName = tagName;
+        this.groupName = groupName;
+        this.name = "ServerComponentBadRequestResponse";
+    }
+}
+
 export {
     RenderError,
     DotJSEngineError,
@@ -90,5 +101,6 @@ export {
     HttpRequestError,
     JsonResponseError,
     InternalServerError,
-    ServerComponentNotFound
+    ServerComponentNotFound,
+    ServerComponentBadRequestResponse
 }
