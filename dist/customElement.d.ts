@@ -91,6 +91,7 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     render: () => Promise<void>;
     _fetchHTML: () => Promise<string>;
     fetchHTML: (request: FetchHtmlRequest) => Promise<string>;
+    _checkFetchHTMLError: (response: Response) => Promise<string>;
     rerender: () => Promise<void>;
     protected _waitForSubelements(): Promise<void>;
     generateHash(length?: number): string;

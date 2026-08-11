@@ -26,5 +26,10 @@ declare class ServerComponentNotFound extends Error {
     protected readonly groupName: string;
     constructor(tagName: string, groupName: string);
 }
-export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound };
+declare class ServerComponentBadRequestResponse extends Error {
+    protected readonly tagName: string;
+    protected readonly groupName: string;
+    constructor(tagName: string, groupName: string);
+}
+export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound, ServerComponentBadRequestResponse };
 //# sourceMappingURL=errors.d.ts.map

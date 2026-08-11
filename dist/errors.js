@@ -52,5 +52,15 @@ class ServerComponentNotFound extends Error {
         this.name = "ServerComponentNotFound";
     }
 }
-export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound };
+class ServerComponentBadRequestResponse extends Error {
+    tagName;
+    groupName;
+    constructor(tagName, groupName) {
+        super(`Server component with tagName '${tagName}' in group '${groupName}' returned a bad request response.`);
+        this.tagName = tagName;
+        this.groupName = groupName;
+        this.name = "ServerComponentBadRequestResponse";
+    }
+}
+export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound, ServerComponentBadRequestResponse };
 //# sourceMappingURL=errors.js.map
