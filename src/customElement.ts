@@ -403,9 +403,12 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
     }
 
-    protected async _markup(): Promise<string|null> {
+    protected async _markup(): Promise<string> {
         try {
-            return await this.markup?.call(this) || null;
+            if(this.markup == null){
+                throw new MissingMarkupMethod(this.tagName);
+            }
+            return await this.markup.call(this);
         } catch (error: unknown) {
             if (
                 error instanceof
@@ -434,11 +437,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                     const markup = this.innerHTML.trim();
                     return markup;
                 }
-                const markup =await this._markup();
-                if(markup === null){
-                    throw new MissingMarkupMethod(this.tagName);
-                }
-                return markup;
+                return await this._markup();
             }
 
             let renderedHtml: string;

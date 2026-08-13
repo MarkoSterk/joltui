@@ -187,7 +187,10 @@ export class CustomElement extends HTMLElement {
     }
     async _markup() {
         try {
-            return await this.markup?.call(this) || null;
+            if (this.markup == null) {
+                throw new MissingMarkupMethod(this.tagName);
+            }
+            return await this.markup.call(this);
         }
         catch (error) {
             if (error instanceof
@@ -210,11 +213,7 @@ export class CustomElement extends HTMLElement {
                     const markup = this.innerHTML.trim();
                     return markup;
                 }
-                const markup = await this._markup();
-                if (markup === null) {
-                    throw new MissingMarkupMethod(this.tagName);
-                }
-                return markup;
+                return await this._markup();
             };
             let renderedHtml;
             if (this.cache) {

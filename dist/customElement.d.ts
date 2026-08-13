@@ -86,7 +86,7 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _resolveInitComplete(): void;
     protected _handleError(error: unknown): Promise<void>;
     protected _runLifecycle(stage: Lifecycle): Promise<void>;
-    protected _markup(): Promise<string | null>;
+    protected _markup(): Promise<string>;
     templateCacheKey(): string;
     render: () => Promise<void>;
     _fetchHTML: () => Promise<string>;
