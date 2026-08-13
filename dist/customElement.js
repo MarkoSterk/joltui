@@ -199,9 +199,16 @@ export class CustomElement extends HTMLElement {
     }
     render = async () => {
         try {
-            const renderTemplate = async () => this.useServer
-                ? await this._fetchHTML()
-                : await this._markup();
+            const renderTemplate = async () => {
+                if (this.useServer) {
+                    return await this._fetchHTML();
+                }
+                if (!this.markup) {
+                    const markup = this.innerHTML.trim();
+                    return markup;
+                }
+                return await this._markup();
+            };
             let renderedHtml;
             if (this.cache) {
                 const cacheKey = this.templateCacheKey();
