@@ -424,10 +424,16 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
     render = async (): Promise<void> => {
         try {
-            const renderTemplate = async (): Promise<string> =>
-                this.useServer
-                    ? await this._fetchHTML()
-                    : await this._markup();
+            const renderTemplate = async (): Promise<string> => {
+                if(this.useServer){
+                    return await this._fetchHTML();
+                }
+                if (!this.markup) {
+                    const markup = this.innerHTML.trim();
+                    return markup;
+                }
+                return await this._markup();
+            }
 
             let renderedHtml: string;
 
