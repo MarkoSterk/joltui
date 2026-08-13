@@ -217,11 +217,13 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
     hashId = "";
 
-    markup: MarkupMethod = function (
-        this: CustomElement,
-    ): never {
-        throw new MissingMarkupMethod(this.tagName);
-    };
+    // markup: MarkupMethod = function (
+    //     this: CustomElement,
+    // ): never {
+    //     throw new MissingMarkupMethod(this.tagName);
+    // };
+
+    markup: MarkupMethod | null = null;
 
     constructor() {
         super();
@@ -401,9 +403,9 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
     }
 
-    protected async _markup(): Promise<string> {
+    protected async _markup(): Promise<string|null> {
         try {
-            return await this.markup.call(this);
+            return await this.markup?.call(this) || null;
         } catch (error: unknown) {
             if (
                 error instanceof
@@ -432,7 +434,11 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                     const markup = this.innerHTML.trim();
                     return markup;
                 }
-                return await this._markup();
+                const markup =await this._markup();
+                if(markup === null){
+                    throw new MissingMarkupMethod(this.tagName);
+                }
+                return markup;
             }
 
             let renderedHtml: string;

@@ -84,9 +84,12 @@ export class CustomElement extends HTMLElement {
     initComplete;
     rndId;
     hashId = "";
-    markup = function () {
-        throw new MissingMarkupMethod(this.tagName);
-    };
+    // markup: MarkupMethod = function (
+    //     this: CustomElement,
+    // ): never {
+    //     throw new MissingMarkupMethod(this.tagName);
+    // };
+    markup = null;
     constructor() {
         super();
         this.rndId = randomId();
@@ -184,7 +187,7 @@ export class CustomElement extends HTMLElement {
     }
     async _markup() {
         try {
-            return await this.markup.call(this);
+            return await this.markup?.call(this) || null;
         }
         catch (error) {
             if (error instanceof
@@ -207,7 +210,11 @@ export class CustomElement extends HTMLElement {
                     const markup = this.innerHTML.trim();
                     return markup;
                 }
-                return await this._markup();
+                const markup = await this._markup();
+                if (markup === null) {
+                    throw new MissingMarkupMethod(this.tagName);
+                }
+                return markup;
             };
             let renderedHtml;
             if (this.cache) {
