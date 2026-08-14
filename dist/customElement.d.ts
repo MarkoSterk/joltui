@@ -74,7 +74,6 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _renderTime: number;
     protected _lastRender: number;
     protected _abort: boolean;
-    protected readonly _virtualRenderDiv = "virtual-render-div";
     readonly initComplete: Promise<void>;
     rndId: number;
     hashId: string;

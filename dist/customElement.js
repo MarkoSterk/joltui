@@ -80,7 +80,6 @@ export class CustomElement extends HTMLElement {
     _renderTime = 0;
     _lastRender = 0;
     _abort = false;
-    _virtualRenderDiv = "virtual-render-div";
     initComplete;
     rndId;
     hashId = "";
