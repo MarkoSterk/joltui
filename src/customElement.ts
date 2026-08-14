@@ -208,9 +208,6 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
     protected _abort = false;
 
-    protected readonly _virtualRenderDiv =
-        "virtual-render-div";
-
     readonly initComplete: Promise<void>;
 
     rndId: number;
@@ -699,13 +696,26 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         });
     }
 
-    protected _hydrate = (): void => {
+    protected _hydrate = (
+        roots: readonly Element[] | null = null,
+    ): void => {
+        const elements = roots
+            ? roots.flatMap(root => [
+                  root,
+                  ...Array.from(
+                      root.querySelectorAll("*"),
+                  ),
+              ])
+            : Array.from(
+                  this.querySelectorAll(
+                      `[data-parent-id="${this.hashId}"]` +
+                      `[data-render-time="${this.lastRender}"]`,
+                  ),
+              );
+
         const elementsWithEvents =
             this._allElementsWithEvents(
-                this.querySelectorAll(
-                    `[data-parent-id="${this.hashId}"]` +
-                    `[data-render-time="${this.lastRender}"]`,
-                ),
+                elements,
             );
         this._setEventListeners(
             elementsWithEvents,
@@ -885,18 +895,18 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     }
 
     protected _allElementsWithEvents(
-        allElements: NodeListOf<Element>,
+        allElements: Iterable<Element>,
     ): ElementEventConfig[] {
         const elementsWithEvents:
             ElementEventConfig[] = [];
 
-        allElements.forEach(element => {
+        for (const element of allElements) {
             elementsWithEvents.push(
                 ...this._elementWithEvent(
                     element,
                 ),
             );
-        });
+        }
 
         return elementsWithEvents;
     }
@@ -983,34 +993,23 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                 parsedTemplate,
             );
 
-        const virtualElement =
-            document.createElement("div");
-
-        virtualElement.classList.add(
-            this._virtualRenderDiv,
-        );
-
-        this.app.originalInsertAdjacentHTML.call(
-            virtualElement,
-            "afterbegin",
-            parsedTemplate,
-        );
-
-        this._lastRender = Date.now();
-
-        return this._tagAllElementsWithParent(
-            virtualElement,
-        ).innerHTML;
+        return parsedTemplate;
     }
 
-    protected _tagAllElementsWithParent<
-        TElement extends Element,
-    >(
-        element: TElement,
-    ): TElement {
-        element
-            .querySelectorAll("*")
-            .forEach(child => {
+    protected _tagInsertedElements = (
+        roots: readonly Element[],
+    ): void => {
+        this._lastRender = Date.now();
+
+        for (const root of roots) {
+            const elements = [
+                root,
+                ...Array.from(
+                    root.querySelectorAll("*"),
+                ),
+            ];
+
+            for (const child of elements) {
                 child.setAttribute(
                     "data-parent-id",
                     this.hashId,
@@ -1020,10 +1019,9 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                     "data-render-time",
                     this.lastRender.toString(),
                 );
-            });
-
-        return element;
-    }
+            }
+        }
+    };
 
     protected _replaceAtWithJolt(
         template: string,
@@ -1113,7 +1111,15 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         return this._dotJSengine;
     }
 
-    get hydrate(): () => void {
+    get tagInsertedElements(): (
+        roots: readonly Element[],
+    ) => void {
+        return this._tagInsertedElements;
+    }
+
+    get hydrate(): (
+        roots?: readonly Element[] | null,
+    ) => void {
         return this._hydrate;
     }
 

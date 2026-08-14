@@ -99,16 +99,16 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _updateBoundQueryParamParts: EventListener;
     invalidate(bindingName: string): void;
     _refreshBoundElements(propertyName: string): void;
-    protected _hydrate: () => void;
+    protected _hydrate: (roots?: readonly Element[] | null) => void;
     protected _setEventListeners(elementsWithEvents: ElementEventConfig[]): void;
     protected _createEventListenerMethod(element: Element, methodName: string): EventListener;
     protected _executeElementMethod(element: Element, methodName: string, event: Event): Promise<void>;
     _getAllArgs(element: Element | HTMLElement | CustomElement): Record<string, unknown>;
-    protected _allElementsWithEvents(allElements: NodeListOf<Element>): ElementEventConfig[];
+    protected _allElementsWithEvents(allElements: Iterable<Element>): ElementEventConfig[];
     protected _elementWithEvent(element: Element): ElementEventConfig[];
     protected _dotJSengine: (template: string) => string;
     protected _parseStringTemplate(template: string): string;
-    protected _tagAllElementsWithParent<TElement extends Element>(element: TElement): TElement;
+    protected _tagInsertedElements: (roots: readonly Element[]) => void;
     protected _replaceAtWithJolt(template: string): string;
     protected _replaceColonWithData(template: string): string;
     getData(field: string): unknown;
@@ -125,7 +125,8 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     get parent(): CustomElement | null;
     get args(): Record<string, unknown>;
     get dotJSengine(): (template: string) => string;
-    get hydrate(): () => void;
+    get tagInsertedElements(): (roots: readonly Element[]) => void;
+    get hydrate(): (roots?: readonly Element[] | null) => void;
     static generate(hashId?: string | null, args?: Record<string, unknown> | null): string;
 }
 export declare function escapeHtmlAttribute(value: string): string;

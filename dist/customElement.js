@@ -369,9 +369,15 @@ export class CustomElement extends HTMLElement {
                 elementTemplate;
         });
     }
-    _hydrate = () => {
-        const elementsWithEvents = this._allElementsWithEvents(this.querySelectorAll(`[data-parent-id="${this.hashId}"]` +
-            `[data-render-time="${this.lastRender}"]`));
+    _hydrate = (roots = null) => {
+        const elements = roots
+            ? roots.flatMap(root => [
+                root,
+                ...Array.from(root.querySelectorAll("*")),
+            ])
+            : Array.from(this.querySelectorAll(`[data-parent-id="${this.hashId}"]` +
+                `[data-render-time="${this.lastRender}"]`));
+        const elementsWithEvents = this._allElementsWithEvents(elements);
         this._setEventListeners(elementsWithEvents);
     };
     _setEventListeners(elementsWithEvents) {
@@ -445,9 +451,9 @@ export class CustomElement extends HTMLElement {
     }
     _allElementsWithEvents(allElements) {
         const elementsWithEvents = [];
-        allElements.forEach(element => {
+        for (const element of allElements) {
             elementsWithEvents.push(...this._elementWithEvent(element));
-        });
+        }
         return elementsWithEvents;
     }
     _elementWithEvent(element) {
@@ -482,21 +488,21 @@ export class CustomElement extends HTMLElement {
         let parsedTemplate = this._replaceAtWithJolt(template);
         parsedTemplate =
             this._replaceColonWithData(parsedTemplate);
-        const virtualElement = document.createElement("div");
-        virtualElement.classList.add(this._virtualRenderDiv);
-        this.app.originalInsertAdjacentHTML.call(virtualElement, "afterbegin", parsedTemplate);
+        return parsedTemplate;
+    }
+    _tagInsertedElements = (roots) => {
         this._lastRender = Date.now();
-        return this._tagAllElementsWithParent(virtualElement).innerHTML;
-    }
-    _tagAllElementsWithParent(element) {
-        element
-            .querySelectorAll("*")
-            .forEach(child => {
-            child.setAttribute("data-parent-id", this.hashId);
-            child.setAttribute("data-render-time", this.lastRender.toString());
-        });
-        return element;
-    }
+        for (const root of roots) {
+            const elements = [
+                root,
+                ...Array.from(root.querySelectorAll("*")),
+            ];
+            for (const child of elements) {
+                child.setAttribute("data-parent-id", this.hashId);
+                child.setAttribute("data-render-time", this.lastRender.toString());
+            }
+        }
+    };
     _replaceAtWithJolt(template) {
         return template.replace(/@(\w+)=/g, "jolt-$1=");
     }
@@ -548,6 +554,9 @@ export class CustomElement extends HTMLElement {
     }
     get dotJSengine() {
         return this._dotJSengine;
+    }
+    get tagInsertedElements() {
+        return this._tagInsertedElements;
     }
     get hydrate() {
         return this._hydrate;

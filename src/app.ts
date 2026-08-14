@@ -825,6 +825,23 @@ class App<
             );
         };
 
+        const elementsBetween = (
+            first: Node | null,
+            end: Node | null,
+        ): Element[] => {
+            const elements: Element[] = [];
+            let current = first;
+
+            while (current && current !== end) {
+                if (current instanceof Element) {
+                    elements.push(current);
+                }
+                current = current.nextSibling;
+            }
+
+            return elements;
+        };
+
         Element.prototype.insertAdjacentHTML = function(position, html){
             const customElement = this.closest("[data-hash-id]") as CustomElement<TApp> | null;
             if(customElement){
@@ -832,8 +849,55 @@ class App<
                 if(!renderedTemplate){
                     return;
                 }
+
+                const parent = this.parentNode;
+                const previousSibling = this.previousSibling;
+                const nextSibling = this.nextSibling;
+                const firstChild = this.firstChild;
+                const lastChild = this.lastChild;
+
                 appInstance._originalInsertAdjacentHTML.call(this, position, renderedTemplate)
-                customElement.hydrate();
+
+                let insertedElements: Element[];
+                switch (position) {
+                    case "beforebegin":
+                        insertedElements = parent
+                            ? elementsBetween(
+                                  previousSibling
+                                      ? previousSibling.nextSibling
+                                      : parent.firstChild,
+                                  this,
+                              )
+                            : [];
+                        break;
+                    case "afterbegin":
+                        insertedElements = elementsBetween(
+                            this.firstChild,
+                            firstChild,
+                        );
+                        break;
+                    case "beforeend":
+                        insertedElements = elementsBetween(
+                            lastChild
+                                ? lastChild.nextSibling
+                                : this.firstChild,
+                            null,
+                        );
+                        break;
+                    case "afterend":
+                        insertedElements = parent
+                            ? elementsBetween(
+                                  this.nextSibling,
+                                  nextSibling,
+                              )
+                            : [];
+                        break;
+                }
+
+                customElement.tagInsertedElements(
+                    insertedElements,
+                );
+                customElement.hydrate(insertedElements);
                 return;
             }
             appInstance._originalInsertAdjacentHTML.call(this, position, html);
@@ -863,8 +927,22 @@ class App<
                     if(!renderedTemplate){
                         return;
                     }
+                    const parent = this.parentNode;
+                    const previousSibling = this.previousSibling;
+                    const nextSibling = this.nextSibling;
                     appInstance._originalOuterHTML.call(this, renderedTemplate);
-                    customElement.hydrate();
+                    const insertedElements = parent
+                        ? elementsBetween(
+                              previousSibling
+                                  ? previousSibling.nextSibling
+                                  : parent.firstChild,
+                              nextSibling,
+                          )
+                        : [];
+                    customElement.tagInsertedElements(
+                        insertedElements,
+                    );
+                    customElement.hydrate(insertedElements);
                     return;
                 }
                 appInstance._originalOuterHTML.call(this, html);
