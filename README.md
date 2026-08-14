@@ -164,6 +164,8 @@ Custom-element tag names must contain a hyphen. Component configuration supports
 
 ## Templates and events
 
+Components can use three different types of templates. If the attribute "useServer" is set to "true", the component will fetch its markup from the component server. If a "markup" method is defined it will use the markup method, else it will use the inner html of the component itself. The latter can be useful in some cases but should be used with caution, because the component first removes its inner html for parsing and preprocessing which disrupts the lifecycle of inner custom components. Heavy nesting is therefore discouraged.
+
 The `html` helper preserves a template literal as a string. JoltUI then evaluates doT expressions such as `{{= ... }}` using the component instance as `this`.
 
 ```ts
