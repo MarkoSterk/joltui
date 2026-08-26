@@ -326,7 +326,7 @@ class Router {
             await this.redirect(anchor.href);
         }
         catch (error) {
-            await this._app.handleError(new RouteFailedError({
+            await this._app.handleErrorOnce(new RouteFailedError({
                 cause: error,
             }));
         }
@@ -359,7 +359,7 @@ class Router {
             await this._loadPath(matchedPath);
         }
         catch (error) {
-            await this.app.handleError(error);
+            await this.app.handleErrorOnce(error);
         }
     };
     _loadPath = async (matchedPath) => {

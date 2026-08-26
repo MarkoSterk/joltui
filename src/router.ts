@@ -699,7 +699,7 @@ class Router<TApp extends App> {
         try {
             await this.redirect(anchor.href);
         } catch (error: unknown) {
-            await this._app.handleError(
+            await this._app.handleErrorOnce(
                 new RouteFailedError({
                     cause: error,
                 }),
@@ -754,7 +754,7 @@ class Router<TApp extends App> {
 
             await this._loadPath(matchedPath);
         } catch (error: unknown) {
-            await this.app.handleError(error);
+            await this.app.handleErrorOnce(error);
         }
     };
 

@@ -1,4 +1,4 @@
-import { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError } from "./customElement.js";
+import { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, ElementInitializationError } from "./customElement.js";
 import { AuthenticationError, AuthorizationError } from "./auth.js";
 import { NotImplementedError } from "./utilities.js";
 import {RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType} from "./router.js";
@@ -105,4 +105,5 @@ export {
     ServerComponentNotFound,
     ServerComponentBadRequestResponse,
     DependencyLoadError,
+    ElementInitializationError,
 }

@@ -21,8 +21,8 @@ export class MissingMarkupMethod extends Error {
 }
 export class DotJSEngineError extends Error {
     elementName;
-    constructor(elementName) {
-        super(`Error in dotJS templating engine in element ${elementName}`);
+    constructor(elementName, options) {
+        super(`Error in dotJS templating engine in element ${elementName}`, options);
         this.name = "DotJSEngineError";
         this.elementName = elementName;
     }
@@ -35,6 +35,18 @@ export class MethodExecutionError extends Error {
             `on element '${elementName}'`, options);
         this.name = "MethodExecutionError";
         this.methodName = methodName;
+        this.elementName = elementName;
+    }
+}
+export class ElementInitializationError extends Error {
+    element;
+    elementName;
+    constructor(element, options) {
+        const elementName = element.tagName.toLowerCase();
+        super(`Failed to initialize element ` +
+            `'${elementName}'.`, options);
+        this.name = "ElementInitializationError";
+        this.element = element;
         this.elementName = elementName;
     }
 }
@@ -70,12 +82,18 @@ function createTemplateSettings() {
 export function randomId(max = 10000, min = 1) {
     return (Math.floor(Math.random() * (max - min + 1)) + min);
 }
-export const html = String.raw;
+export const html = (strings, ...values) => {
+    return strings.reduce((result, part, index) => result + part + (values[index] ?? ""), "");
+};
 export class CustomElement extends HTMLElement {
     static tagName = "";
     static dependencies = [];
     _app = null;
     _resolveInitialization = null;
+    _rejectInitialization = null;
+    _initializationState = "pending";
+    _initializationError = null;
+    _initializationTask = null;
     _templateSettings = createTemplateSettings();
     _parent = null;
     _renderTime = 0;
@@ -93,13 +111,19 @@ export class CustomElement extends HTMLElement {
     constructor() {
         super();
         this.rndId = randomId();
-        this.initComplete = new Promise(resolve => {
+        this.initComplete = new Promise((resolve, reject) => {
             this._resolveInitialization = resolve;
+            this._rejectInitialization = reject;
         });
+        void this.initComplete.catch(() => undefined);
     }
     async connectedCallback() {
+        if (this._initializationState !== "pending" ||
+            this._initializationTask) {
+            return;
+        }
         if (this.hasAttribute("defer")) {
-            this._resolveInitComplete();
+            this._completeInitialization();
             return;
         }
         await this.initElement();
@@ -116,7 +140,18 @@ export class CustomElement extends HTMLElement {
         }
         void this._runLifecycle(Lifecycle.AFTER_DISCONNECT);
     }
-    initElement = async () => {
+    initElement = () => {
+        if (this._initializationTask) {
+            return this._initializationTask;
+        }
+        if (this._initializationState !== "pending") {
+            return this.initComplete;
+        }
+        this._initializationTask =
+            this._initializeElement();
+        return this._initializationTask;
+    };
+    _initializeElement = async () => {
         try {
             this._abort = false;
             const appContainer = this.closest("[app-id]");
@@ -143,31 +178,70 @@ export class CustomElement extends HTMLElement {
             this._templateSettings =
                 createTemplateSettings();
             await this._loadDependencies();
+            if (this._completeIfAborted()) {
+                return;
+            }
             await this._runLifecycle(Lifecycle.BEFORE_INIT);
+            if (this._completeIfAborted()) {
+                return;
+            }
             this.app.addEventListener(dataEventEnum.CHANGE, this._updateBoundAppDataParts);
             this.app.addEventListener(dataEventEnum.QUERY_CHANGE, this._updateBoundQueryParamParts);
             if (this.dataField) {
                 this.app.registerDataListener(this);
             }
             await this.render();
-            if (this._abort) {
-                this._resolveInitComplete();
+            if (this._completeIfAborted()) {
                 return;
             }
             await this._waitForSubelements();
+            if (this._completeIfAborted()) {
+                return;
+            }
             await this._runLifecycle(Lifecycle.BEFORE_INIT_RESOLVE);
-            this._resolveInitComplete();
+            this._completeInitialization();
             await this._runLifecycle(Lifecycle.AFTER_INIT);
         }
         catch (error) {
             this._abort = true;
-            this._resolveInitComplete();
+            if (this._initializationState ===
+                "pending") {
+                const initializationError = error instanceof
+                    ElementInitializationError
+                    ? error
+                    : new ElementInitializationError(this, { cause: error });
+                this._failInitialization(initializationError);
+                await this._handleError(initializationError);
+                return;
+            }
             await this._handleError(error);
         }
     };
-    _resolveInitComplete() {
+    _completeInitialization() {
+        if (this._initializationState !== "pending") {
+            return;
+        }
+        this._initializationState = "fulfilled";
         this._resolveInitialization?.();
         this._resolveInitialization = null;
+        this._rejectInitialization = null;
+    }
+    _failInitialization(error) {
+        if (this._initializationState !== "pending") {
+            return;
+        }
+        this._initializationState = "rejected";
+        this._initializationError = error;
+        this._rejectInitialization?.(error);
+        this._resolveInitialization = null;
+        this._rejectInitialization = null;
+    }
+    _completeIfAborted() {
+        if (!this._abort && this.isConnected) {
+            return false;
+        }
+        this._completeInitialization();
+        return true;
     }
     async _loadDependencies() {
         const constructorChain = [];
@@ -201,7 +275,7 @@ export class CustomElement extends HTMLElement {
     }
     async _handleError(error) {
         if (this._app) {
-            await this._app.handleError(error);
+            await this._app.handleErrorOnce(error);
             return;
         }
         console.error(error);
@@ -266,7 +340,7 @@ export class CustomElement extends HTMLElement {
         }
         catch (error) {
             this._abort = true;
-            await this._handleError(error);
+            throw error;
         }
     };
     _fetchHTML = async () => {
@@ -350,14 +424,21 @@ export class CustomElement extends HTMLElement {
         }
     };
     rerender = async () => {
-        this._templateSettings.dataBinds.clear();
-        await this._runLifecycle(Lifecycle.BEFORE_RERENDER);
-        await this.render();
-        if (this._abort) {
-            return;
+        try {
+            this._templateSettings.dataBinds.clear();
+            await this._runLifecycle(Lifecycle.BEFORE_RERENDER);
+            await this.render();
+            if (this._abort) {
+                return;
+            }
+            await this._waitForSubelements();
+            await this._runLifecycle(Lifecycle.AFTER_RERENDER);
         }
-        await this._waitForSubelements();
-        await this._runLifecycle(Lifecycle.AFTER_RERENDER);
+        catch (error) {
+            this._abort = true;
+            await this._handleError(error);
+            throw error;
+        }
     };
     async _waitForSubelements() {
         const customElements = Array.from(this.querySelectorAll("*")).filter((element) => element instanceof CustomElement);
@@ -510,9 +591,7 @@ export class CustomElement extends HTMLElement {
         }
         catch (error) {
             this._abort = true;
-            console.error(error);
-            void this._handleError(new DotJSEngineError(this.tagName));
-            return "";
+            throw new DotJSEngineError(this.tagName, { cause: error });
         }
     };
     _parseStringTemplate(template) {
@@ -551,6 +630,12 @@ export class CustomElement extends HTMLElement {
     }
     get lastRender() {
         return this._lastRender;
+    }
+    get initializationState() {
+        return this._initializationState;
+    }
+    get initializationError() {
+        return this._initializationError;
     }
     get app() {
         if (!this._app) {

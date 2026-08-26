@@ -30,6 +30,7 @@ export {
 export type {
     CustomElementClass,
     FetchHtmlRequest,
+    InitializationState,
 } from "./customElement.js"
 
 export type {
@@ -125,4 +126,5 @@ export {
     InternalServerError,
     ServerComponentNotFound,
     DependencyLoadError,
+    ElementInitializationError,
 } from "./errors.js";

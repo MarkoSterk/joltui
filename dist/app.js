@@ -66,6 +66,7 @@ class App {
     _dataStructure;
     _router = null;
     _dataChangeListeners = new Map();
+    _handledErrors = new WeakMap();
     _originalInnerHTML;
     _originalOuterHTML;
     _originalInsertAdjacentHTML;
@@ -287,6 +288,19 @@ class App {
             }
         }
         throw error;
+    };
+    handleErrorOnce = (error) => {
+        if (!(error instanceof Error)) {
+            return Promise.reject(new Error("Failed to handle error. Provided " +
+                "instance is not an instance of Error."));
+        }
+        const existing = this._handledErrors.get(error);
+        if (existing) {
+            return existing;
+        }
+        const handling = this.handleError(error);
+        this._handledErrors.set(error, handling);
+        return handling;
     };
     addEventListener(eventType, listener, options) {
         this.container.addEventListener(eventType, listener, options);

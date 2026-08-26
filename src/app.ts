@@ -185,6 +185,10 @@ class App<
         Map<string, DataChangeListener> =
             new Map();
 
+    protected readonly _handledErrors:
+        WeakMap<Error, Promise<void>> =
+            new WeakMap();
+
     protected readonly _originalInnerHTML:
         ElementHtmlSetter;
 
@@ -699,6 +703,30 @@ class App<
         }
 
         throw error;
+    };
+
+    handleErrorOnce = (
+        error: unknown,
+    ): Promise<void> => {
+        if (!(error instanceof Error)) {
+            return Promise.reject(
+                new Error(
+                    "Failed to handle error. Provided " +
+                    "instance is not an instance of Error.",
+                ),
+            );
+        }
+
+        const existing =
+            this._handledErrors.get(error);
+
+        if (existing) {
+            return existing;
+        }
+
+        const handling = this.handleError(error);
+        this._handledErrors.set(error, handling);
+        return handling;
     };
 
     addEventListener<

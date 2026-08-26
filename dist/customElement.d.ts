@@ -13,12 +13,18 @@ export declare class MissingMarkupMethod extends Error {
 }
 export declare class DotJSEngineError extends Error {
     protected readonly elementName: string;
-    constructor(elementName: string);
+    constructor(elementName: string, options?: ErrorOptions);
 }
 export declare class MethodExecutionError extends Error {
     protected readonly methodName: string;
     protected readonly elementName: string;
     constructor(methodName: string, elementName: string, options?: ErrorOptions);
+}
+export type InitializationState = "pending" | "fulfilled" | "rejected";
+export declare class ElementInitializationError extends Error {
+    readonly element: CustomElement;
+    readonly elementName: string;
+    constructor(element: CustomElement, options?: ErrorOptions);
 }
 export declare class MarkupFetchError extends Error {
     protected elementName: string;
@@ -64,14 +70,16 @@ export type TemplateSettings = DoTTemplateSettings & {
     sanitizeFunc: DoTSanitizeFunction;
 };
 export declare function randomId(max?: number, min?: number): number;
-export declare const html: (template: {
-    raw: readonly string[] | ArrayLike<string>;
-}, ...substitutions: any[]) => string;
+export declare const html: (strings: TemplateStringsArray, ...values: unknown[]) => string;
 export declare abstract class CustomElement<TApp extends App = App> extends HTMLElement {
     static readonly tagName: string;
     static readonly dependencies: readonly LazyDependency[];
     protected _app: TApp | null;
     protected _resolveInitialization: (() => void) | null;
+    protected _rejectInitialization: ((reason: Error) => void) | null;
+    protected _initializationState: InitializationState;
+    protected _initializationError: Error | null;
+    protected _initializationTask: Promise<void> | null;
     protected _templateSettings: TemplateSettings;
     protected _parent: CustomElement | null;
     protected _renderTime: number;
@@ -85,7 +93,10 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     connectedCallback(): Promise<void>;
     disconnectedCallback(): void;
     initElement: () => Promise<void>;
-    protected _resolveInitComplete(): void;
+    protected _initializeElement: () => Promise<void>;
+    protected _completeInitialization(): void;
+    protected _failInitialization(error: Error): void;
+    protected _completeIfAborted(): boolean;
     protected _loadDependencies(): Promise<void>;
     protected _handleError(error: unknown): Promise<void>;
     protected _runLifecycle(stage: Lifecycle): Promise<void>;
@@ -118,6 +129,8 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     setData(field: string, data: unknown): void;
     get data(): ReadonlyMap<string, unknown>;
     get lastRender(): number;
+    get initializationState(): InitializationState;
+    get initializationError(): Error | null;
     get app(): TApp;
     get metadata(): ElementMetadata<TApp>;
     get dataField(): string | null;

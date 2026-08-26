@@ -49,6 +49,7 @@ declare class App<TApp extends App<TApp> = any> {
     protected _dataStructure: Map<string, unknown>;
     protected _router: Router<TApp> | null;
     protected readonly _dataChangeListeners: Map<string, DataChangeListener>;
+    protected readonly _handledErrors: WeakMap<Error, Promise<void>>;
     protected readonly _originalInnerHTML: ElementHtmlSetter;
     protected readonly _originalOuterHTML: ElementHtmlSetter;
     protected readonly _originalInsertAdjacentHTML: typeof Element.prototype.insertAdjacentHTML;
@@ -84,6 +85,7 @@ declare class App<TApp extends App<TApp> = any> {
     getElementsByTagName<K extends keyof HTMLElementTagNameMap>(tagName: K): HTMLCollectionOf<HTMLElementTagNameMap[K]>;
     matches(selector: string): boolean;
     handleError: (error: unknown) => Promise<void>;
+    handleErrorOnce: (error: unknown) => Promise<void>;
     addEventListener<K extends keyof AppEventMap>(eventType: K, listener: AppEventListener<K>, options?: boolean | AddEventListenerOptions): void;
     addEventListener(eventType: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void;
     removeEventListener<K extends keyof AppEventMap>(eventType: K, listener: AppEventListener<K>, options?: boolean | EventListenerOptions): void;

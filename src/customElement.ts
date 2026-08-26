@@ -46,9 +46,13 @@ export class MissingMarkupMethod extends Error {
 export class DotJSEngineError extends Error {
     protected readonly elementName: string;
 
-    constructor(elementName: string) {
+    constructor(
+        elementName: string,
+        options?: ErrorOptions,
+    ) {
         super(
             `Error in dotJS templating engine in element ${elementName}`,
+            options,
         );
 
         this.name = "DotJSEngineError";
@@ -73,6 +77,34 @@ export class MethodExecutionError extends Error {
 
         this.name = "MethodExecutionError";
         this.methodName = methodName;
+        this.elementName = elementName;
+    }
+}
+
+export type InitializationState =
+    | "pending"
+    | "fulfilled"
+    | "rejected";
+
+export class ElementInitializationError extends Error {
+    readonly element: CustomElement;
+    readonly elementName: string;
+
+    constructor(
+        element: CustomElement,
+        options?: ErrorOptions,
+    ) {
+        const elementName =
+            element.tagName.toLowerCase();
+
+        super(
+            `Failed to initialize element ` +
+            `'${elementName}'.`,
+            options,
+        );
+
+        this.name = "ElementInitializationError";
+        this.element = element;
         this.elementName = elementName;
     }
 }
@@ -216,6 +248,19 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         | (() => void)
         | null = null;
 
+    protected _rejectInitialization:
+        | ((reason: Error) => void)
+        | null = null;
+
+    protected _initializationState:
+        InitializationState = "pending";
+
+    protected _initializationError:
+        Error | null = null;
+
+    protected _initializationTask:
+        Promise<void> | null = null;
+
     protected _templateSettings: TemplateSettings =
         createTemplateSettings();
 
@@ -247,16 +292,28 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         this.rndId = randomId();
 
         this.initComplete = new Promise<void>(
-            resolve => {
+            (resolve, reject) => {
                 this._resolveInitialization = resolve;
+                this._rejectInitialization = reject;
             },
+        );
+
+        void this.initComplete.catch(
+            () => undefined,
         );
 
     }
 
     async connectedCallback(): Promise<void> {
+        if (
+            this._initializationState !== "pending" ||
+            this._initializationTask
+        ) {
+            return;
+        }
+
         if (this.hasAttribute("defer")) {
-            this._resolveInitComplete();
+            this._completeInitialization();
             return;
         }
         await this.initElement();
@@ -283,7 +340,22 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         );
     }
 
-    initElement = async (): Promise<void> => {
+    initElement = (): Promise<void> => {
+        if (this._initializationTask) {
+            return this._initializationTask;
+        }
+
+        if (this._initializationState !== "pending") {
+            return this.initComplete;
+        }
+
+        this._initializationTask =
+            this._initializeElement();
+
+        return this._initializationTask;
+    };
+
+    protected _initializeElement = async (): Promise<void> => {
         try {
             this._abort = false;
 
@@ -345,9 +417,17 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
             await this._loadDependencies();
 
+            if (this._completeIfAborted()) {
+                return;
+            }
+
             await this._runLifecycle(
                 Lifecycle.BEFORE_INIT
             );
+
+            if (this._completeIfAborted()) {
+                return;
+            }
 
             this.app.addEventListener(
                 dataEventEnum.CHANGE,
@@ -365,33 +445,89 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
             await this.render();
 
-            if (this._abort) {
-                this._resolveInitComplete();
+            if (this._completeIfAborted()) {
                 return;
             }
 
             await this._waitForSubelements();
 
+            if (this._completeIfAborted()) {
+                return;
+            }
+
             await this._runLifecycle(
                 Lifecycle.BEFORE_INIT_RESOLVE,
             );
 
-            this._resolveInitComplete();
+            this._completeInitialization();
 
             await this._runLifecycle(
                 Lifecycle.AFTER_INIT,
             );
         } catch (error: unknown) {
             this._abort = true;
-            this._resolveInitComplete();
+
+            if (
+                this._initializationState ===
+                "pending"
+            ) {
+                const initializationError =
+                    error instanceof
+                    ElementInitializationError
+                        ? error
+                        : new ElementInitializationError(
+                              this,
+                              { cause: error },
+                          );
+
+                this._failInitialization(
+                    initializationError,
+                );
+
+                await this._handleError(
+                    initializationError,
+                );
+                return;
+            }
 
             await this._handleError(error);
         }
     };
 
-    protected _resolveInitComplete(): void {
+    protected _completeInitialization(): void {
+        if (
+            this._initializationState !== "pending"
+        ) {
+            return;
+        }
+
+        this._initializationState = "fulfilled";
         this._resolveInitialization?.();
         this._resolveInitialization = null;
+        this._rejectInitialization = null;
+    }
+
+    protected _failInitialization(error: Error): void {
+        if (
+            this._initializationState !== "pending"
+        ) {
+            return;
+        }
+
+        this._initializationState = "rejected";
+        this._initializationError = error;
+        this._rejectInitialization?.(error);
+        this._resolveInitialization = null;
+        this._rejectInitialization = null;
+    }
+
+    protected _completeIfAborted(): boolean {
+        if (!this._abort && this.isConnected) {
+            return false;
+        }
+
+        this._completeInitialization();
+        return true;
     }
 
     protected async _loadDependencies(): Promise<void> {
@@ -462,7 +598,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         error: unknown,
     ): Promise<void> {
         if (this._app) {
-            await this._app.handleError(error);
+            await this._app.handleErrorOnce(error);
             return;
         }
 
@@ -557,7 +693,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         } catch (error: unknown) {
             this._abort = true;
 
-            await this._handleError(error);
+            throw error;
         }
     };
 
@@ -659,23 +795,29 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     }
 
     rerender = async (): Promise<void> => {
-        this._templateSettings.dataBinds.clear();
+        try {
+            this._templateSettings.dataBinds.clear();
 
-        await this._runLifecycle(
-            Lifecycle.BEFORE_RERENDER,
-        );
+            await this._runLifecycle(
+                Lifecycle.BEFORE_RERENDER,
+            );
 
-        await this.render();
+            await this.render();
 
-        if (this._abort) {
-            return;
+            if (this._abort) {
+                return;
+            }
+
+            await this._waitForSubelements();
+
+            await this._runLifecycle(
+                Lifecycle.AFTER_RERENDER,
+            );
+        } catch (error: unknown) {
+            this._abort = true;
+            await this._handleError(error);
+            throw error;
         }
-
-        await this._waitForSubelements();
-
-        await this._runLifecycle(
-            Lifecycle.AFTER_RERENDER,
-        );
     };
 
     protected async _waitForSubelements(): Promise<
@@ -1055,15 +1197,10 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         } catch (error: unknown) {
             this._abort = true;
 
-            console.error(error);
-
-            void this._handleError(
-                new DotJSEngineError(
-                    this.tagName,
-                ),
+            throw new DotJSEngineError(
+                this.tagName,
+                { cause: error },
             );
-
-            return "";
         }
     };
 
@@ -1143,6 +1280,14 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
     get lastRender(): number {
         return this._lastRender;
+    }
+
+    get initializationState(): InitializationState {
+        return this._initializationState;
+    }
+
+    get initializationError(): Error | null {
+        return this._initializationError;
     }
 
     get app(): TApp {

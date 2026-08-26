@@ -492,6 +492,22 @@ class Application extends App<Application> {
 
 Handlers are checked in registration order. If no handler accepts an error, the error is rethrown.
 
+Component initialization failures reject the element's `initComplete`
+promise with an `ElementInitializationError`. Its `cause` contains the
+original dependency, lifecycle, rendering, or descendant error. The same
+failure is propagated unchanged through the component tree and application
+error handlers process it at most once.
+
+Use `initializationState` and `initializationError` when synchronous status
+inspection is needed:
+
+```ts
+await element.initComplete;
+
+console.log(element.initializationState); // "fulfilled"
+console.log(element.initializationError); // null
+```
+
 ## Lifecycle hooks
 
 Use `@lifecycle` on application or component methods:
@@ -524,6 +540,12 @@ Available stages are:
 - `AFTER_DISCONNECT`
 
 Multiple methods may subscribe to the same stage and are awaited in registration order.
+
+`initComplete` resolves after dependencies, `BEFORE_INIT`, rendering,
+descendant initialization, and `BEFORE_INIT_RESOLVE` finish successfully. It
+resolves immediately before `AFTER_INIT` runs. Consequently, an `AFTER_INIT`
+failure is reported through the application error handlers but does not change
+an already fulfilled initialization state.
 
 ## Selecting elements
 

@@ -32,13 +32,15 @@ export default defineConfig({
 
             tsconfig: {
                 override: {
-                    target: ts.ScriptTarget.ES2022,
-                    module: ts.ModuleKind.ESNext,
-                    moduleResolution:
-                        ts.ModuleResolutionKind.Bundler,
-                    experimentalDecorators: false,
-                    useDefineForClassFields: true,
-                },
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.ESNext,
+                moduleResolution:
+                    ts.ModuleResolutionKind.Bundler,
+                experimentalDecorators: false,
+                useDefineForClassFields: true,
+                sourceMap: true,
+                inlineSources: true,
+            },
             },
         }),
     ],
