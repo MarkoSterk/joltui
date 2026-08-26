@@ -2,6 +2,7 @@ import App from "./app.js";
 import { type DoTDataBindTemplates, type DoTSanitizeFunction, type DoTTemplateSettings } from "./dotjs/dot.js";
 import { Lifecycle } from "./lifecycle.js";
 import { type ElementMetadata } from "./elementMetadata.js";
+import type { LazyDependency } from "./lazy.js";
 export declare class RenderError extends Error {
     protected readonly elementName: string;
     constructor(elementName: string);
@@ -37,6 +38,7 @@ export type TemplateFunction = (this: CustomElement, ...args: unknown[]) => unkn
 export type CustomElementClass<TApp extends App = App, TElement extends CustomElement<TApp> = CustomElement<TApp>> = CustomElementConstructor & {
     new (): TElement;
     readonly tagName: string;
+    readonly dependencies: readonly LazyDependency[];
     generate(hashId?: string | null, args?: Record<string, unknown> | null): string;
 };
 type ElementEventConfig = {
@@ -67,6 +69,7 @@ export declare const html: (template: {
 }, ...substitutions: any[]) => string;
 export declare abstract class CustomElement<TApp extends App = App> extends HTMLElement {
     static readonly tagName: string;
+    static readonly dependencies: readonly LazyDependency[];
     protected _app: TApp | null;
     protected _resolveInitialization: (() => void) | null;
     protected _templateSettings: TemplateSettings;
@@ -83,6 +86,7 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     disconnectedCallback(): void;
     initElement: () => Promise<void>;
     protected _resolveInitComplete(): void;
+    protected _loadDependencies(): Promise<void>;
     protected _handleError(error: unknown): Promise<void>;
     protected _runLifecycle(stage: Lifecycle): Promise<void>;
     protected _markup(): Promise<string>;

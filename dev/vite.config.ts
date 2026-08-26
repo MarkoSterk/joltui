@@ -1,6 +1,8 @@
 import { fileURLToPath, URL } from "node:url";
 import ts from "typescript";
 import { defineConfig } from "vite";
+import minifyHTMLLiterals from
+    "@lit-labs/rollup-plugin-minify-html-literals";
 import {
     vitePluginTypescriptTransform,
 } from "vite-plugin-typescript-transform";
@@ -11,6 +13,14 @@ export default defineConfig({
     ),
 
     plugins: [
+        {
+            ...minifyHTMLLiterals({
+                include: ["**/*.ts"],
+                failOnError: true,
+            }),
+            apply: "build",
+            enforce: "pre",
+        },
         vitePluginTypescriptTransform({
             enforce: "pre",
 
@@ -52,5 +62,20 @@ export default defineConfig({
             new URL("../dev-dist", import.meta.url),
         ),
         emptyOutDir: true,
+        cssCodeSplit: true,
+        manifest: true,
+        modulePreload: {
+            polyfill: true,
+        },
+        rolldownOptions: {
+            output: {
+                entryFileNames:
+                    "assets/[name]-[hash].js",
+                chunkFileNames:
+                    "assets/chunks/[name]-[hash].js",
+                assetFileNames:
+                    "assets/[name]-[hash][extname]",
+            },
+        },
     },
 });

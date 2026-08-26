@@ -2,6 +2,7 @@ import { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionErro
 import { AuthenticationError, AuthorizationError } from "./auth.js";
 import { NotImplementedError } from "./utilities.js";
 import { RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType } from "./router.js";
+import { DependencyLoadError } from "./lazy.js";
 class NetworkError extends Error {
     constructor(msg, options) {
         super(msg, options);
@@ -62,5 +63,5 @@ class ServerComponentBadRequestResponse extends Error {
         this.name = "ServerComponentBadRequestResponse";
     }
 }
-export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound, ServerComponentBadRequestResponse };
+export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound, ServerComponentBadRequestResponse, DependencyLoadError, };
 //# sourceMappingURL=errors.js.map

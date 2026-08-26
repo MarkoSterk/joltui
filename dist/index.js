@@ -7,5 +7,6 @@ export { lifecycle, Lifecycle } from "./lifecycle.js";
 export { react, reactFactory, queryParam, select, selectAll } from "./properties.js";
 export { default as ErrorHandler, handles } from "./errorHandler.js";
 export { default as RequestHelper, } from "./requestHelper.js";
-export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound, } from "./errors.js";
+export { lazy, } from "./lazy.js";
+export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound, DependencyLoadError, } from "./errors.js";
 //# sourceMappingURL=index.js.map

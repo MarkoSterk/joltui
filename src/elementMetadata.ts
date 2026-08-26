@@ -419,6 +419,30 @@ export function component<
                     configs.cacheDuration ?? null,
             },
         );
+
+        context.addInitializer(() => {
+            const registered =
+                customElements.get(
+                    configs.tagName,
+                );
+
+            if (registered) {
+                if (registered !== elementClass) {
+                    throw new Error(
+                        `Custom element ` +
+                        `'${configs.tagName}' is already ` +
+                        `registered with another constructor.`,
+                    );
+                }
+
+                return;
+            }
+
+            customElements.define(
+                configs.tagName,
+                elementClass,
+            );
+        });
     };
 }
 

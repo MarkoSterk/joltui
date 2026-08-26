@@ -2,6 +2,7 @@ import { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionErro
 import { AuthenticationError, AuthorizationError } from "./auth.js";
 import { NotImplementedError } from "./utilities.js";
 import {RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType} from "./router.js";
+import { DependencyLoadError } from "./lazy.js";
 
 class NetworkError extends Error{
     constructor(msg: string, options?: ErrorOptions){
@@ -102,5 +103,6 @@ export {
     JsonResponseError,
     InternalServerError,
     ServerComponentNotFound,
-    ServerComponentBadRequestResponse
+    ServerComponentBadRequestResponse,
+    DependencyLoadError,
 }

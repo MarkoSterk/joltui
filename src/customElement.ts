@@ -18,6 +18,9 @@ import {
     requireElementMetadata,
     type ElementMetadata,
 } from "./elementMetadata.js";
+import type {
+    LazyDependency,
+} from "./lazy.js";
 import { AuthenticationError, AuthorizationError, InternalServerError, NetworkError, ServerComponentNotFound, ServerComponentBadRequestResponse } from "./errors.js";
 
 export class RenderError extends Error {
@@ -115,6 +118,9 @@ export type CustomElementClass<
 
     readonly tagName: string;
 
+    readonly dependencies:
+        readonly LazyDependency[];
+
     generate(
         hashId?: string | null,
         args?: Record<string, unknown> | null,
@@ -186,10 +192,23 @@ export function randomId(
     );
 }
 
-export const html = String.raw;
+export const html = (
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+): string => {
+    return strings.reduce(
+        (result, part, index) =>
+            result + part + (values[index] ?? ""),
+        "",
+    );
+};
+
 
 export abstract class CustomElement<TApp extends App = App> extends HTMLElement {
     static readonly tagName: string = "";
+
+    static readonly dependencies:
+        readonly LazyDependency[] = [];
 
     protected _app: TApp | null = null;
 
@@ -324,6 +343,8 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             this._templateSettings =
                 createTemplateSettings();
 
+            await this._loadDependencies();
+
             await this._runLifecycle(
                 Lifecycle.BEFORE_INIT
             );
@@ -371,6 +392,70 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     protected _resolveInitComplete(): void {
         this._resolveInitialization?.();
         this._resolveInitialization = null;
+    }
+
+    protected async _loadDependencies(): Promise<void> {
+        const constructorChain:
+            Array<typeof CustomElement> = [];
+
+        let constructor =
+            this.constructor as typeof CustomElement;
+
+        while (
+            constructor === CustomElement ||
+            constructor.prototype instanceof
+                CustomElement
+        ) {
+            constructorChain.unshift(constructor);
+            constructor = Object.getPrototypeOf(
+                constructor,
+            ) as typeof CustomElement;
+        }
+
+        const dependencies =
+            new Set<LazyDependency>();
+
+        for (const elementClass of constructorChain) {
+            if (
+                !Object.prototype.hasOwnProperty.call(
+                    elementClass,
+                    "dependencies",
+                )
+            ) {
+                continue;
+            }
+
+            const declaredDependencies =
+                elementClass.dependencies;
+
+            if (!Array.isArray(declaredDependencies)) {
+                throw new TypeError(
+                    `Static dependencies for ` +
+                    `'${this.tagName}' must be an array.`,
+                );
+            }
+
+            for (const dependency of declaredDependencies) {
+                if (
+                    !dependency ||
+                    typeof dependency.load !== "function"
+                ) {
+                    throw new TypeError(
+                        `Invalid lazy dependency declared by ` +
+                        `'${this.tagName}'.`,
+                    );
+                }
+
+                dependencies.add(dependency);
+            }
+        }
+
+        await Promise.all(
+            Array.from(
+                dependencies,
+                dependency => dependency.load(),
+            ),
+        );
     }
 
     protected async _handleError(

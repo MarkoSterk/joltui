@@ -1,0 +1,30 @@
+{
+  "_src-lvp-qxr0.js": {
+    "file": "assets/chunks/src-lvp-qxr0.js",
+    "name": "src"
+  },
+  "index.html": {
+    "file": "assets/index-CoJKkahe.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "imports": [
+      "_src-lvp-qxr0.js"
+    ],
+    "dynamicImports": [
+      "src/app/components/loginForm.ts"
+    ],
+    "css": [
+      "assets/index-DDMLYvgT.css"
+    ]
+  },
+  "src/app/components/loginForm.ts": {
+    "file": "assets/chunks/loginForm-DhQ5dSqg.js",
+    "name": "loginForm",
+    "src": "src/app/components/loginForm.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_src-lvp-qxr0.js"
+    ]
+  }
+}

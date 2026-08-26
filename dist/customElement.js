@@ -73,6 +73,7 @@ export function randomId(max = 10000, min = 1) {
 export const html = String.raw;
 export class CustomElement extends HTMLElement {
     static tagName = "";
+    static dependencies = [];
     _app = null;
     _resolveInitialization = null;
     _templateSettings = createTemplateSettings();
@@ -141,6 +142,7 @@ export class CustomElement extends HTMLElement {
             }
             this._templateSettings =
                 createTemplateSettings();
+            await this._loadDependencies();
             await this._runLifecycle(Lifecycle.BEFORE_INIT);
             this.app.addEventListener(dataEventEnum.CHANGE, this._updateBoundAppDataParts);
             this.app.addEventListener(dataEventEnum.QUERY_CHANGE, this._updateBoundQueryParamParts);
@@ -166,6 +168,36 @@ export class CustomElement extends HTMLElement {
     _resolveInitComplete() {
         this._resolveInitialization?.();
         this._resolveInitialization = null;
+    }
+    async _loadDependencies() {
+        const constructorChain = [];
+        let constructor = this.constructor;
+        while (constructor === CustomElement ||
+            constructor.prototype instanceof
+                CustomElement) {
+            constructorChain.unshift(constructor);
+            constructor = Object.getPrototypeOf(constructor);
+        }
+        const dependencies = new Set();
+        for (const elementClass of constructorChain) {
+            if (!Object.prototype.hasOwnProperty.call(elementClass, "dependencies")) {
+                continue;
+            }
+            const declaredDependencies = elementClass.dependencies;
+            if (!Array.isArray(declaredDependencies)) {
+                throw new TypeError(`Static dependencies for ` +
+                    `'${this.tagName}' must be an array.`);
+            }
+            for (const dependency of declaredDependencies) {
+                if (!dependency ||
+                    typeof dependency.load !== "function") {
+                    throw new TypeError(`Invalid lazy dependency declared by ` +
+                        `'${this.tagName}'.`);
+                }
+                dependencies.add(dependency);
+            }
+        }
+        await Promise.all(Array.from(dependencies, dependency => dependency.load()));
     }
     async _handleError(error) {
         if (this._app) {

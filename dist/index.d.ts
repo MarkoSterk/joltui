@@ -13,5 +13,7 @@ export { default as ErrorHandler, handles } from "./errorHandler.js";
 export type { ErrorConstructor, ErrorHandlerClass, ErrorHandlerMethod, } from "./errorHandler.js";
 export { default as RequestHelper, } from "./requestHelper.js";
 export type { RequestOptions, } from "./requestHelper.js";
-export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound, } from "./errors.js";
+export { lazy, } from "./lazy.js";
+export type { LazyDependency, LazyImportLoader, } from "./lazy.js";
+export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound, DependencyLoadError, } from "./errors.js";
 //# sourceMappingURL=index.d.ts.map

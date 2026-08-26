@@ -97,6 +97,15 @@ export type {
     RequestOptions,
 } from "./requestHelper.js";
 
+export {
+    lazy,
+} from "./lazy.js";
+
+export type {
+    LazyDependency,
+    LazyImportLoader,
+} from "./lazy.js";
+
 
 export {
     RenderError,
@@ -115,4 +124,5 @@ export {
     JsonResponseError,
     InternalServerError,
     ServerComponentNotFound,
+    DependencyLoadError,
 } from "./errors.js";

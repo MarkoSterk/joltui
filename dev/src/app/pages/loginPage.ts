@@ -1,7 +1,9 @@
-import { CustomElement, RequestHelper, component, html, page, queryParam, select } from "joltui";
+import { CustomElement, component, html, page, queryParam, lazy } from "joltui";
 import type FieldnotesApp from "../app.js";
 import AuthLayout from "../layouts/authLayout.js";
 import type { DemoUser } from "../types.js";
+
+const LoginForm = lazy(() => import("../components/loginForm.js"));
 
 @page({ path: "/login", title: "Sign in — Fieldnotes", layout: AuthLayout })
 @component({ tagName: "login-page" })
@@ -10,10 +12,7 @@ export default class LoginPage extends CustomElement<FieldnotesApp> {
     @queryParam("target", "/profile")
     accessor target!: string;
 
-    @select(".login-form")
-    accessor form!: HTMLFormElement|null;
-
-    //target: string = "/profile"
+    static override readonly dependencies = [LoginForm] as const;
 
     override markup = () => html`
         <section class="login-panel">
@@ -23,24 +22,7 @@ export default class LoginPage extends CustomElement<FieldnotesApp> {
                 <p>Sign in to view your profile and continue your saved drafts.</p>
             </div>
 
-            <form class="login-form" @submit="login">
-                <div>
-                    <label class="form-label" for="email">Email address</label>
-                    <input class="form-control" id="email" name="email" type="email" value="reader@fieldnotes.test" required autocomplete="email">
-                </div>
-                <div>
-                    <div class="d-flex justify-content-between">
-                        <label class="form-label" for="password">Password</label>
-                        <span class="field-hint">Any password works</span>
-                    </div>
-                    <input class="form-control" id="password" name="password" type="password" value="fieldnotes" required autocomplete="current-password">
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" id="remember" type="checkbox" checked>
-                    <label class="form-check-label" for="remember">Keep me signed in</label>
-                </div>
-                <button class="btn btn-ink btn-lg w-100" type="submit">Sign in <i class="fa-solid fa-arrow-right-long ms-2"></i></button>
-            </form>
+            <login-form class="login-form" data-caller-id="${this.hashId}"></login-form>
 
             <p class="login-note"><i class="fa-solid fa-circle-info"></i> This is a demo login. No credentials are sent or stored.</p>
         </section>
