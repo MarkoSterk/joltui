@@ -4,7 +4,6 @@ import {
     type CustomElementClass,
 } from "./customElement.js";
 import {
-    getElementMetadata,
     requireElementMetadata,
     type PageMetadata,
     type SubLayoutConfig,
@@ -138,6 +137,7 @@ export type RouterConfig<
     defaultTarget: string;
     indexRoute?: string;
     app: TApp;
+    pages: readonly CustomElementClass<TApp>[];
 };
 
 export type RedirectOptions = {
@@ -184,6 +184,9 @@ function isCustomElementClass<
 }
 
 class Router<TApp extends App> {
+    readonly pages:
+        readonly CustomElementClass<TApp>[];
+
     protected readonly _app: TApp;
     protected readonly _baseLayout: CustomElementClass<TApp>;
     protected readonly _defaultTarget: string;
@@ -207,6 +210,7 @@ class Router<TApp extends App> {
         defaultTarget,
         indexRoute = "/",
         app,
+        pages,
     }: RouterConfig<TApp>) {
         if (!app) {
             throw new Error(
@@ -217,6 +221,18 @@ class Router<TApp extends App> {
         if (!isCustomElementClass<TApp>(baseLayout)) {
             throw new TypeError(
                 "Invalid base layout element class",
+            );
+        }
+
+        if (!Array.isArray(pages)) {
+            throw new TypeError(
+                "Router pages must be an array.",
+            );
+        }
+
+        if (pages.length === 0) {
+            throw new Error(
+                "Router must contain at least one page.",
             );
         }
 
@@ -240,6 +256,9 @@ class Router<TApp extends App> {
 
         this._app = app;
         this._baseLayout = baseLayout;
+        this.pages = Object.freeze([
+            ...pages,
+        ]);
         this._defaultTarget = defaultTarget;
         this._baseUrl = this._normalizeBaseUrl(baseUrl);
         this._indexRoute = this._joinBaseUrl(
@@ -280,32 +299,35 @@ class Router<TApp extends App> {
     protected _discoverRoutes(): Route<TApp>[] {
         const routes: Route<TApp>[] = [];
 
-        for (const elementClass of this.app.elements) {
-            if (!isCustomElementClass<TApp>(elementClass)) {
+        for (const pageClass of this.pages) {
+            if (!isCustomElementClass<TApp>(pageClass)) {
                 throw new TypeError(
-                    "Application elements must contain CustomElement classes.",
+                    "Router pages must contain CustomElement classes.",
                 );
             }
 
             const metadata =
-                getElementMetadata<TApp>(elementClass);
+                requireElementMetadata<TApp>(
+                    pageClass,
+                );
 
-            if (!metadata || metadata.kind !== "page") {
-                continue;
+            if (metadata.kind !== "page") {
+                throw new TypeError(
+                    `Router page '${pageClass.name}' ` +
+                    "must use @page.",
+                );
             }
 
             routes.push(
                 this._createRouteFromMetadata(
-                    elementClass,
+                    pageClass,
                     metadata,
                 ),
             );
         }
 
         if (routes.length === 0) {
-            throw new Error(
-                "The application does not contain any @page components.",
-            );
+            throw new Error("Router does not contain any pages.");
         }
 
         return routes;
@@ -334,10 +356,14 @@ class Router<TApp extends App> {
             );
         }
 
-        if (!this.app.elements.includes(layout)) {
+        if (
+            customElements.get(
+                layoutMetadata.tagName,
+            ) !== layout
+        ) {
             throw new Error(
-                `Page layout '${layout.name}' is not registered ` +
-                `in app.elements.`,
+                `Page layout '${layout.name}' is not ` +
+                "registered with its decorated constructor.",
             );
         }
 
@@ -365,13 +391,13 @@ class Router<TApp extends App> {
             }
 
             if (
-                !this.app.elements.includes(
-                    subLayout.layout,
-                )
+                customElements.get(
+                    subLayoutMetadata.tagName,
+                ) !== subLayout.layout
             ) {
                 throw new Error(
                     `Page sublayout '${subLayout.layout.name}' ` +
-                    "is not registered in app.elements.",
+                    "is not registered with its decorated constructor.",
                 );
             }
         }

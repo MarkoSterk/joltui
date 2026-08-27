@@ -2,7 +2,6 @@ import Router from "./router.js";
 import ErrorHandler, {} from "./errorHandler.js";
 import { CustomElement, } from "./customElement.js";
 import { transformSelector } from "./selectorParser/index.js";
-import { requireElementMetadata } from "./elementMetadata.js";
 import { Lifecycle, getLifecycleMethods, } from "./lifecycle.js";
 export const dataEventEnum = {
     CHANGE: "app-data-change",
@@ -56,7 +55,6 @@ function stableSerialize(value, seen = new WeakSet()) {
     return serialized;
 }
 class App {
-    elements = [];
     errorHandlers = [];
     _errorHandlerInstances = [];
     _identifier = "app";
@@ -134,7 +132,6 @@ class App {
         this._container.app = this.application;
         this._container.setAttribute("app-id", this.generateHash());
         this._startTemplatesCacheCleanup();
-        this.registerCustomElements(this.elements);
         this._modifyPrototypeMethods();
         this._errorHandlerInstances = this._initializeErrorHandlers();
         await this._runLifecycleStage(Lifecycle.BEFORE_INIT);
@@ -165,21 +162,6 @@ class App {
             throw new Error("Could not find the application container.");
         }
         return container;
-    }
-    registerCustomElements(elements) {
-        for (const element of elements) {
-            const metadata = requireElementMetadata(element);
-            const registered = customElements.get(metadata.tagName);
-            if (registered) {
-                if (registered !== element) {
-                    throw new Error(`Custom element ` +
-                        `'${metadata.tagName}' is already ` +
-                        `registered with another constructor.`);
-                }
-                continue;
-            }
-            customElements.define(metadata.tagName, element);
-        }
     }
     registerDataListener = (component) => {
         const dataField = component.dataField;

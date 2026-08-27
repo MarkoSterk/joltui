@@ -94,24 +94,20 @@ Create the router and application:
 import {
     App,
     Router,
-    type CustomElementClass,
 } from "joltui";
 
 import { HomePage } from "./homePage.js";
 import { MainLayout } from "./mainLayout.js";
 
+const pages = [HomePage] as const;
+
 class ApplicationRouter extends Router<Application> {}
 
 class Application extends App<Application> {
-    override readonly elements:
-        readonly CustomElementClass<Application>[] = [
-            MainLayout,
-            HomePage,
-        ];
-
     protected override routerGenerator() {
         return new ApplicationRouter({
             app: this,
+            pages,
             baseLayout: MainLayout,
             defaultTarget: "#page",
         });
@@ -125,7 +121,9 @@ const app = new Application({
 await app.init("#app");
 ```
 
-All decorated components and layouts used by the application must be included in `app.elements`.
+Pages are declared explicitly on the router. Imported components register
+themselves through `@component`; layouts are discovered from the base layout
+and page metadata.
 
 ## Components
 
@@ -354,7 +352,9 @@ layout and the page element:
 class ProfilePage extends CustomElement {}
 ```
 
-Each sublayout must use `@layout` and must be registered in `app.elements`.
+Each sublayout must use `@layout`. Its imported module registers the layout
+through `@component`, and the router validates that registration from the page
+metadata.
 The order is significant: the first target is resolved inside the base layout,
 and each later target is resolved inside the preceding sublayout. The page
 target is resolved inside the final sublayout.
@@ -374,6 +374,7 @@ JoltUI currently renders one page handler per route; it does not provide nested 
 ```ts
 return new ApplicationRouter({
     app: this,
+    pages,
     baseLayout: MainLayout,
     defaultTarget: "#page",
     baseUrl: "/ecris/<str:system>/<str:language>",

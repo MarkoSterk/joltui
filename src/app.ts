@@ -4,10 +4,8 @@ import ErrorHandler, {
 } from "./errorHandler.js";
 import {
     CustomElement,
-    type CustomElementClass,
 } from "./customElement.js";
 import { transformSelector } from "./selectorParser/index.js";
-import { requireElementMetadata } from "./elementMetadata.js";
 import {
     Lifecycle,
     getLifecycleMethods,
@@ -159,9 +157,6 @@ function stableSerialize(
 class App<
     TApp extends App<TApp> = any,
 > {
-    readonly elements:
-        readonly CustomElementClass<TApp>[] = [];
-
     readonly errorHandlers:
         readonly ErrorHandlerClass<TApp>[] = [];
 
@@ -335,10 +330,6 @@ class App<
 
         this._startTemplatesCacheCleanup();
 
-        this.registerCustomElements(
-            this.elements,
-        );
-
         this._modifyPrototypeMethods();
 
         this._errorHandlerInstances = this._initializeErrorHandlers();
@@ -400,38 +391,6 @@ class App<
         }
 
         return container as AppContainer<TApp>;
-    }
-
-    registerCustomElements(
-        elements:
-            readonly CustomElementClass<TApp>[],
-    ): void {
-        for (const element of elements) {
-            const metadata =
-                requireElementMetadata(element);
-
-            const registered =
-                customElements.get(
-                    metadata.tagName,
-                );
-
-            if (registered) {
-                if (registered !== element) {
-                    throw new Error(
-                        `Custom element ` +
-                        `'${metadata.tagName}' is already ` +
-                        `registered with another constructor.`,
-                    );
-                }
-
-                continue;
-            }
-
-            customElements.define(
-                metadata.tagName,
-                element,
-            );
-        }
     }
 
     registerDataListener = (

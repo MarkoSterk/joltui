@@ -65,6 +65,7 @@ export type RouterConfig<TApp extends App> = {
     defaultTarget: string;
     indexRoute?: string;
     app: TApp;
+    pages: readonly CustomElementClass<TApp>[];
 };
 export type RedirectOptions = {
     useBaseUrl?: boolean;
@@ -90,6 +91,7 @@ type ActiveSubLayout<TApp extends App = App> = {
     element: CustomElement<TApp>;
 };
 declare class Router<TApp extends App> {
+    readonly pages: readonly CustomElementClass<TApp>[];
     protected readonly _app: TApp;
     protected readonly _baseLayout: CustomElementClass<TApp>;
     protected readonly _defaultTarget: string;
@@ -101,7 +103,7 @@ declare class Router<TApp extends App> {
     protected _routeParameters: RouteParameters;
     protected _inTransition: boolean;
     protected _activeSubLayouts: ActiveSubLayout<TApp>[];
-    constructor({ baseUrl, baseLayout, defaultTarget, indexRoute, app, }: RouterConfig<TApp>);
+    constructor({ baseUrl, baseLayout, defaultTarget, indexRoute, app, pages, }: RouterConfig<TApp>);
     isAuthenticated(): MaybePromise<boolean>;
     checkUserRoles(_roles: unknown[]): MaybePromise<boolean>;
     titleGenerator(tagName: string, title: string | null): MaybePromise<string>;

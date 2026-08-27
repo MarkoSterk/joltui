@@ -1,6 +1,6 @@
 import App from "./app.js";
 import { CustomElement, } from "./customElement.js";
-import { getElementMetadata, requireElementMetadata, } from "./elementMetadata.js";
+import { requireElementMetadata, } from "./elementMetadata.js";
 import { NotImplementedError } from "./utilities.js";
 import { AuthenticationError, AuthorizationError } from "./auth.js";
 export const routeEventsEnum = {
@@ -45,6 +45,7 @@ function isCustomElementClass(value) {
         value.prototype instanceof CustomElement);
 }
 class Router {
+    pages;
     _app;
     _baseLayout;
     _defaultTarget;
@@ -56,12 +57,18 @@ class Router {
     _routeParameters = {};
     _inTransition = false;
     _activeSubLayouts = [];
-    constructor({ baseUrl = "", baseLayout, defaultTarget, indexRoute = "/", app, }) {
+    constructor({ baseUrl = "", baseLayout, defaultTarget, indexRoute = "/", app, pages, }) {
         if (!app) {
             throw new Error("Missing application object in router constructor");
         }
         if (!isCustomElementClass(baseLayout)) {
             throw new TypeError("Invalid base layout element class");
+        }
+        if (!Array.isArray(pages)) {
+            throw new TypeError("Router pages must be an array.");
+        }
+        if (pages.length === 0) {
+            throw new Error("Router must contain at least one page.");
         }
         const layoutMetadata = requireElementMetadata(baseLayout);
         if (layoutMetadata.kind !== "layout") {
@@ -73,6 +80,9 @@ class Router {
         }
         this._app = app;
         this._baseLayout = baseLayout;
+        this.pages = Object.freeze([
+            ...pages,
+        ]);
         this._defaultTarget = defaultTarget;
         this._baseUrl = this._normalizeBaseUrl(baseUrl);
         this._indexRoute = this._joinBaseUrl(indexRoute);
@@ -92,18 +102,19 @@ class Router {
     }
     _discoverRoutes() {
         const routes = [];
-        for (const elementClass of this.app.elements) {
-            if (!isCustomElementClass(elementClass)) {
-                throw new TypeError("Application elements must contain CustomElement classes.");
+        for (const pageClass of this.pages) {
+            if (!isCustomElementClass(pageClass)) {
+                throw new TypeError("Router pages must contain CustomElement classes.");
             }
-            const metadata = getElementMetadata(elementClass);
-            if (!metadata || metadata.kind !== "page") {
-                continue;
+            const metadata = requireElementMetadata(pageClass);
+            if (metadata.kind !== "page") {
+                throw new TypeError(`Router page '${pageClass.name}' ` +
+                    "must use @page.");
             }
-            routes.push(this._createRouteFromMetadata(elementClass, metadata));
+            routes.push(this._createRouteFromMetadata(pageClass, metadata));
         }
         if (routes.length === 0) {
-            throw new Error("The application does not contain any @page components.");
+            throw new Error("Router does not contain any pages.");
         }
         return routes;
     }
@@ -117,9 +128,9 @@ class Router {
         if (layoutMetadata.kind !== "layout") {
             throw new TypeError(`Page layout '${layout.name}' must use @layout.`);
         }
-        if (!this.app.elements.includes(layout)) {
-            throw new Error(`Page layout '${layout.name}' is not registered ` +
-                `in app.elements.`);
+        if (customElements.get(layoutMetadata.tagName) !== layout) {
+            throw new Error(`Page layout '${layout.name}' is not ` +
+                "registered with its decorated constructor.");
         }
         for (const [index, subLayout] of metadata.subLayouts.entries()) {
             if (!isCustomElementClass(subLayout.layout)) {
@@ -131,9 +142,9 @@ class Router {
                 throw new TypeError(`Page sublayout '${subLayout.layout.name}' ` +
                     "must use @layout.");
             }
-            if (!this.app.elements.includes(subLayout.layout)) {
+            if (customElements.get(subLayoutMetadata.tagName) !== subLayout.layout) {
                 throw new Error(`Page sublayout '${subLayout.layout.name}' ` +
-                    "is not registered in app.elements.");
+                    "is not registered with its decorated constructor.");
             }
         }
         return {

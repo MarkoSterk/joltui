@@ -1,6 +1,6 @@
 import Router from "./router.js";
 import ErrorHandler, { type ErrorHandlerClass } from "./errorHandler.js";
-import { CustomElement, type CustomElementClass } from "./customElement.js";
+import { CustomElement } from "./customElement.js";
 import { Lifecycle } from "./lifecycle.js";
 export declare const dataEventEnum: {
     readonly CHANGE: "app-data-change";
@@ -39,7 +39,6 @@ type TemplatesCacheEntry = {
     setTime: number;
 };
 declare class App<TApp extends App<TApp> = any> {
-    readonly elements: readonly CustomElementClass<TApp>[];
     readonly errorHandlers: readonly ErrorHandlerClass<TApp>[];
     protected _errorHandlerInstances: readonly ErrorHandler<TApp>[];
     protected readonly _identifier = "app";
@@ -70,7 +69,6 @@ declare class App<TApp extends App<TApp> = any> {
     protected get application(): TApp;
     protected routerGenerator(): Router<TApp> | null;
     protected _resolveContainer(target?: string | Element): AppContainer<TApp>;
-    registerCustomElements(elements: readonly CustomElementClass<TApp>[]): void;
     registerDataListener: (component: CustomElement<TApp>) => void;
     removeDataListener: (component: CustomElement<TApp>) => void;
     generateHash: (length?: number) => string;
