@@ -3,8 +3,6 @@ import type FieldnotesApp from "../app.js";
 import AuthLayout from "../layouts/authLayout.js";
 import type { DemoUser } from "../types.js";
 
-const LoginForm = lazy(() => import("../components/loginForm.js"));
-
 @page({ path: "/login", title: "Sign in — Fieldnotes", layout: AuthLayout })
 @component({ tagName: "login-page" })
 export default class LoginPage extends CustomElement<FieldnotesApp> {
@@ -12,7 +10,7 @@ export default class LoginPage extends CustomElement<FieldnotesApp> {
     @queryParam("target", "/profile")
     accessor target!: string;
 
-    static override readonly dependencies = [LoginForm] as const;
+    static override readonly dependencies = [lazy(() => import("../components/loginForm.js"))] as const;
 
     override markup = () => html`
         <section class="login-panel">
