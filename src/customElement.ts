@@ -1231,7 +1231,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         template: string,
     ): string {
         return template.replace(
-            /@(\w+)=/g,
+            /@([a-z][a-z0-9]*(?:-[a-z0-9]+)*)=/g,
             "jolt-$1=",
         );
     }
@@ -1240,7 +1240,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         template: string,
     ): string {
         return template.replace(
-            /:(\w+)=/g,
+            /:([a-z][a-z0-9]*(?:-[a-z0-9]+)*)=/g,
             "data-jolt-$1=",
         );
     }

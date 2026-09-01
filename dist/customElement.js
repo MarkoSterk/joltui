@@ -592,10 +592,10 @@ export class CustomElement extends HTMLElement {
         }
     };
     _replaceAtWithJolt(template) {
-        return template.replace(/@(\w+)=/g, "jolt-$1=");
+        return template.replace(/@([a-z][a-z0-9]*(?:-[a-z0-9]+)*)=/g, "jolt-$1=");
     }
     _replaceColonWithData(template) {
-        return template.replace(/:(\w+)=/g, "data-jolt-$1=");
+        return template.replace(/:([a-z][a-z0-9]*(?:-[a-z0-9]+)*)=/g, "data-jolt-$1=");
     }
     getData(field) {
         return this.app.getData(field);
