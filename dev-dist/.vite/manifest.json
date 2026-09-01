@@ -1,15 +1,15 @@
 {
-  "_src-1x3LVlPl.js": {
-    "file": "assets/chunks/src-1x3LVlPl.js",
+  "_src-C6SD15NY.js": {
+    "file": "assets/chunks/src-C6SD15NY.js",
     "name": "src"
   },
   "index.html": {
-    "file": "assets/index-7YEY6cGv.js",
+    "file": "assets/index-D0TICoxL.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "imports": [
-      "_src-1x3LVlPl.js"
+      "_src-C6SD15NY.js"
     ],
     "dynamicImports": [
       "src/app/components/loginForm.ts"
@@ -19,12 +19,12 @@
     ]
   },
   "src/app/components/loginForm.ts": {
-    "file": "assets/chunks/loginForm-CmWql_Ro.js",
+    "file": "assets/chunks/loginForm-D46QVHS5.js",
     "name": "loginForm",
     "src": "src/app/components/loginForm.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_src-1x3LVlPl.js"
+      "_src-C6SD15NY.js"
     ]
   }
 }

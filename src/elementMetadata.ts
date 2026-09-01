@@ -63,6 +63,7 @@ export type LayoutMetadata =
     BaseElementMetadata &
     Readonly<{
         kind: "layout";
+        authentication: AuthenticationMetadata | null;
     }>;
 
 export type PageMetadata<
@@ -78,10 +79,7 @@ export type PageMetadata<
         title: string | null;
         target: string | null;
         extras: Readonly<Record<string, unknown>>;
-        authentication: {
-            authenticationRequired: boolean;
-            rolesRequired: unknown[];
-        } | null;
+        authentication: AuthenticationMetadata | null;
         roles: unknown[] | null;
     }>;
 
@@ -318,7 +316,7 @@ function setElementMetadata(
     );
 }
 
-export function setPageAuthenticationMetadata<
+export function setElementAuthenticationMetadata<
     TApp extends App = App,
 >(
     elementClass: Function,
@@ -329,9 +327,15 @@ export function setPageAuthenticationMetadata<
             | ElementMetadata<TApp>
             | undefined;
 
-    if (!metadata || metadata.kind !== "page") {
+    if (
+        !metadata ||
+        (
+            metadata.kind !== "page" &&
+            metadata.kind !== "layout"
+        )
+    ) {
         throw new TypeError(
-            "@auth requires @page to be applied below it.",
+            "@auth requires @page or @layout to be applied below it.",
         );
     }
 
@@ -339,13 +343,13 @@ export function setPageAuthenticationMetadata<
         elementClass,
         {
             ...metadata,
-            authentication: {
+            authentication: Object.freeze({
                 authenticationRequired:
                     authentication.authenticationRequired,
-                rolesRequired: [
+                rolesRequired: Object.freeze([
                     ...authentication.rolesRequired,
-                ],
-            },
+                ]),
+            }),
         },
     );
 }
@@ -474,15 +478,15 @@ export function page<
 
         const authentication =
             configs.authentication
-                ? {
+                ? Object.freeze({
                     authenticationRequired:
                         configs.authentication
                             .authenticationRequired,
-                    rolesRequired: [
+                    rolesRequired: Object.freeze([
                         ...configs.authentication
                             .rolesRequired,
-                    ],
-                }
+                    ]),
+                })
                 : null;
 
         setElementMetadata(
@@ -541,6 +545,7 @@ export function layout<
         {
             ...componentMetadata,
             kind: "layout",
+            authentication: null,
         },
     );
 }

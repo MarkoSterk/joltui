@@ -1,7 +1,7 @@
 import App from "./app.js";
 import type { CustomElementClass } from "./customElement.js";
 import {
-    setPageAuthenticationMetadata,
+    setElementAuthenticationMetadata,
 } from "./elementMetadata.js";
 
 export function auth(
@@ -27,7 +27,7 @@ export function auth(
             );
         }
 
-        setPageAuthenticationMetadata(
+        setElementAuthenticationMetadata(
             elementClass,
             {
                 authenticationRequired: true,

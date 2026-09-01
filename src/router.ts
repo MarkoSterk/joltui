@@ -5,6 +5,8 @@ import {
 } from "./customElement.js";
 import {
     requireElementMetadata,
+    type AuthenticationMetadata,
+    type LayoutMetadata,
     type PageMetadata,
     type SubLayoutConfig,
 } from "./elementMetadata.js";
@@ -81,8 +83,15 @@ export type RouteParameters = Record<
 
 export type Authentication = {
     authenticationRequired: boolean;
-    rolesRequired: unknown[];
+    rolesRequired: readonly unknown[];
 };
+
+export type RouteAuthenticationRequirement<
+    TApp extends App = App,
+> = Readonly<{
+    element: CustomElementClass<TApp>;
+    authentication: AuthenticationMetadata;
+}>;
 
 export type MaybePromise<T> = T | Promise<T>;
 
@@ -102,6 +111,8 @@ export type Route<
     title: string | null;
     extras: RouteExtras;
     authentication: Authentication | null;
+    authenticationChain:
+        readonly RouteAuthenticationRequirement<TApp>[];
     roles: unknown[] | null;
 };
 
@@ -116,6 +127,8 @@ export type ParsedRoute<
     title: string | null;
     extras: RouteExtras;
     authentication: Authentication | null;
+    authenticationChain:
+        readonly RouteAuthenticationRequirement<TApp>[];
     args: HandlerArgs | null;
     roles: unknown[] | null;
     route: string;
@@ -402,6 +415,14 @@ class Router<TApp extends App> {
             }
         }
 
+        const authenticationChain =
+            this._createAuthenticationChain(
+                handler,
+                metadata,
+                layout,
+                layoutMetadata,
+            );
+
         return {
             path: this._joinBaseUrl(metadata.path),
             handler,
@@ -414,8 +435,63 @@ class Router<TApp extends App> {
             extras: metadata.extras,
             authentication:
                 metadata.authentication,
+            authenticationChain,
             roles: metadata.roles,
         };
+    }
+
+    protected _createAuthenticationChain(
+        handler: CustomElementClass<TApp>,
+        pageMetadata: PageMetadata<TApp>,
+        layout: CustomElementClass<TApp>,
+        layoutMetadata: LayoutMetadata,
+    ): readonly RouteAuthenticationRequirement<TApp>[] {
+        const requirements:
+            RouteAuthenticationRequirement<TApp>[] = [];
+
+        const addRequirement = (
+            element: CustomElementClass<TApp>,
+            authentication: AuthenticationMetadata | null,
+        ): void => {
+            if (!authentication) {
+                return;
+            }
+
+            requirements.push(Object.freeze({
+                element,
+                authentication,
+            }));
+        };
+
+        addRequirement(
+            layout,
+            layoutMetadata.authentication,
+        );
+
+        for (const subLayout of pageMetadata.subLayouts) {
+            const metadata = requireElementMetadata(
+                subLayout.layout,
+            );
+
+            if (metadata.kind !== "layout") {
+                throw new TypeError(
+                    `Page sublayout '${subLayout.layout.name}' ` +
+                    "must use @layout.",
+                );
+            }
+
+            addRequirement(
+                subLayout.layout,
+                metadata.authentication,
+            );
+        }
+
+        addRequirement(
+            handler,
+            pageMetadata.authentication,
+        );
+
+        return Object.freeze(requirements);
     }
 
     protected _parseRoutes(
@@ -445,6 +521,8 @@ class Router<TApp extends App> {
                     extras: route.extras,
                     authentication:
                         route.authentication,
+                    authenticationChain:
+                        route.authenticationChain,
                     args: null,
                     roles: route.roles,
                     route: route.path,
@@ -746,41 +824,54 @@ class Router<TApp extends App> {
             const matchedPath =
                 this._matchRoute(path);
 
-            if (
-                matchedPath.authentication
-                    ?.authenticationRequired
-            ) {
-                const authenticated =
-                    await this.isAuthenticated();
-
-                if (!authenticated) {
-                    throw new AuthenticationError(
-                        matchedPath.path,
-                    );
-                }
-
-                const requiredRoles =
-                    matchedPath.authentication
-                        .rolesRequired;
-
-                if (requiredRoles.length > 0) {
-                    const authorized =
-                        await this.checkUserRoles(
-                            requiredRoles,
-                        );
-
-                    if (!authorized) {
-                        throw new AuthorizationError(
-                            matchedPath.path,
-                            requiredRoles,
-                        );
-                    }
-                }
-            }
+            await this._authorizeRoute(matchedPath);
 
             await this._loadPath(matchedPath);
         } catch (error: unknown) {
             await this.app.handleErrorOnce(error);
+        }
+    };
+
+    protected _authorizeRoute = async (
+        matchedPath: MatchedRoute<TApp>,
+    ): Promise<void> => {
+        const requirements =
+            matchedPath.authenticationChain.filter(
+                requirement =>
+                    requirement.authentication
+                        .authenticationRequired,
+            );
+
+        if (requirements.length === 0) {
+            return;
+        }
+
+        if (!(await this.isAuthenticated())) {
+            throw new AuthenticationError(
+                matchedPath.path,
+            );
+        }
+
+        for (const requirement of requirements) {
+            const requiredRoles =
+                requirement.authentication
+                    .rolesRequired;
+
+            if (requiredRoles.length === 0) {
+                continue;
+            }
+
+            const authorized =
+                await this.checkUserRoles([
+                    ...requiredRoles,
+                ]);
+
+            if (!authorized) {
+                throw new AuthorizationError(
+                    matchedPath.path,
+                    [...requiredRoles],
+                );
+            }
         }
     };
 

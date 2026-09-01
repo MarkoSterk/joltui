@@ -425,7 +425,7 @@ The redirect throws a `RouteParametersError` when a required base parameter is m
 
 ## Authentication and authorization
 
-Apply `@auth()` to require authentication, or provide roles:
+Apply `@auth()` to pages or layouts to require authentication, or provide roles:
 
 ```ts
 import { auth } from "joltui";
@@ -435,6 +435,27 @@ import { auth } from "joltui";
 @component({ tagName: "admin-page" })
 class AdminPage extends CustomElement {}
 ```
+
+A protected layout acts as a gatekeeper for every route that uses it, including routes that configure it as a sublayout:
+
+```ts
+@auth(["USER"])
+@layout
+@component({ tagName: "account-layout" })
+class AccountLayout extends CustomElement {}
+
+@page({
+    path: "/profile",
+    subLayouts: [{
+        target: "#content",
+        layout: AccountLayout,
+    }],
+})
+@component({ tagName: "profile-page" })
+class ProfilePage extends CustomElement {}
+```
+
+The router validates the complete base-layout, sublayout, and page authentication chain before rendering any part of the route. Authentication is checked once per navigation. Role requirements declared by different members of the chain are checked independently, so they are cumulative. The checks still run when an existing layout is reused.
 
 Implement the checks in a router subclass:
 

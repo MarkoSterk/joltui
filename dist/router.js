@@ -147,6 +147,7 @@ class Router {
                     "is not registered with its decorated constructor.");
             }
         }
+        const authenticationChain = this._createAuthenticationChain(handler, metadata, layout, layoutMetadata);
         return {
             path: this._joinBaseUrl(metadata.path),
             handler,
@@ -157,8 +158,32 @@ class Router {
             title: metadata.title,
             extras: metadata.extras,
             authentication: metadata.authentication,
+            authenticationChain,
             roles: metadata.roles,
         };
+    }
+    _createAuthenticationChain(handler, pageMetadata, layout, layoutMetadata) {
+        const requirements = [];
+        const addRequirement = (element, authentication) => {
+            if (!authentication) {
+                return;
+            }
+            requirements.push(Object.freeze({
+                element,
+                authentication,
+            }));
+        };
+        addRequirement(layout, layoutMetadata.authentication);
+        for (const subLayout of pageMetadata.subLayouts) {
+            const metadata = requireElementMetadata(subLayout.layout);
+            if (metadata.kind !== "layout") {
+                throw new TypeError(`Page sublayout '${subLayout.layout.name}' ` +
+                    "must use @layout.");
+            }
+            addRequirement(subLayout.layout, metadata.authentication);
+        }
+        addRequirement(handler, pageMetadata.authentication);
+        return Object.freeze(requirements);
     }
     _parseRoutes(routes) {
         const routeMap = new Map();
@@ -174,6 +199,7 @@ class Router {
                 title: route.title,
                 extras: route.extras,
                 authentication: route.authentication,
+                authenticationChain: route.authenticationChain,
                 args: null,
                 roles: route.roles,
                 route: route.path,
@@ -352,25 +378,34 @@ class Router {
                 path = this.indexRoute;
             }
             const matchedPath = this._matchRoute(path);
-            if (matchedPath.authentication
-                ?.authenticationRequired) {
-                const authenticated = await this.isAuthenticated();
-                if (!authenticated) {
-                    throw new AuthenticationError(matchedPath.path);
-                }
-                const requiredRoles = matchedPath.authentication
-                    .rolesRequired;
-                if (requiredRoles.length > 0) {
-                    const authorized = await this.checkUserRoles(requiredRoles);
-                    if (!authorized) {
-                        throw new AuthorizationError(matchedPath.path, requiredRoles);
-                    }
-                }
-            }
+            await this._authorizeRoute(matchedPath);
             await this._loadPath(matchedPath);
         }
         catch (error) {
             await this.app.handleErrorOnce(error);
+        }
+    };
+    _authorizeRoute = async (matchedPath) => {
+        const requirements = matchedPath.authenticationChain.filter(requirement => requirement.authentication
+            .authenticationRequired);
+        if (requirements.length === 0) {
+            return;
+        }
+        if (!(await this.isAuthenticated())) {
+            throw new AuthenticationError(matchedPath.path);
+        }
+        for (const requirement of requirements) {
+            const requiredRoles = requirement.authentication
+                .rolesRequired;
+            if (requiredRoles.length === 0) {
+                continue;
+            }
+            const authorized = await this.checkUserRoles([
+                ...requiredRoles,
+            ]);
+            if (!authorized) {
+                throw new AuthorizationError(matchedPath.path, [...requiredRoles]);
+            }
         }
     };
     _loadPath = async (matchedPath) => {

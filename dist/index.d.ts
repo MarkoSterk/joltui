@@ -6,7 +6,7 @@ export type { CustomElementClass, FetchHtmlRequest, InitializationState, } from 
 export type { ElementKind, ElementMetadata, ComponentConfigs, ComponentMetadata, PageConfigs, PageMetadata, LayoutMetadata, AuthenticationMetadata, SubLayoutConfig, } from "./elementMetadata.js";
 export { default as Router, routeEventsEnum, } from "./router.js";
 export { auth } from "./auth.js";
-export type { Authentication, Route, RouteExtras, RouteParameters, ParsedRoute, MatchedRoute, RouterConfig, RedirectOptions, HandlerArgs, } from "./router.js";
+export type { Authentication, RouteAuthenticationRequirement, Route, RouteExtras, RouteParameters, ParsedRoute, MatchedRoute, RouterConfig, RedirectOptions, HandlerArgs, } from "./router.js";
 export { lifecycle, Lifecycle } from "./lifecycle.js";
 export { react, reactFactory, queryParam, select, selectAll } from "./properties.js";
 export { default as ErrorHandler, handles } from "./errorHandler.js";

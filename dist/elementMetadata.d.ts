@@ -40,6 +40,7 @@ export type ComponentMetadata = BaseElementMetadata & Readonly<{
 }>;
 export type LayoutMetadata = BaseElementMetadata & Readonly<{
     kind: "layout";
+    authentication: AuthenticationMetadata | null;
 }>;
 export type PageMetadata<TApp extends App = App> = BaseElementMetadata & Readonly<{
     kind: "page";
@@ -49,15 +50,12 @@ export type PageMetadata<TApp extends App = App> = BaseElementMetadata & Readonl
     title: string | null;
     target: string | null;
     extras: Readonly<Record<string, unknown>>;
-    authentication: {
-        authenticationRequired: boolean;
-        rolesRequired: unknown[];
-    } | null;
+    authentication: AuthenticationMetadata | null;
     roles: unknown[] | null;
 }>;
 export type ElementMetadata<TApp extends App = App> = ComponentMetadata | LayoutMetadata | PageMetadata<TApp>;
 type DecoratedElementClass<TApp extends App = App> = CustomElementClass<TApp, CustomElement<TApp>>;
-export declare function setPageAuthenticationMetadata<TApp extends App = App>(elementClass: Function, authentication: AuthenticationMetadata): void;
+export declare function setElementAuthenticationMetadata<TApp extends App = App>(elementClass: Function, authentication: AuthenticationMetadata): void;
 export declare function component<TApp extends App = App>(configs: ComponentConfigs): <TClass extends DecoratedElementClass<TApp>>(elementClass: TClass, context: ClassDecoratorContext<TClass>) => void;
 export declare function page<TApp extends App = App>(pathOrConfigs: string | PageConfigs<TApp>): <TClass extends DecoratedElementClass<TApp>>(elementClass: TClass, context: ClassDecoratorContext<TClass>) => void;
 export declare function layout<TClass extends DecoratedElementClass>(elementClass: TClass, context: ClassDecoratorContext<TClass>): void;

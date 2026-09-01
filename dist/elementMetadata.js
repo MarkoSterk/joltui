@@ -94,19 +94,21 @@ function defineTagName(elementClass, tagName) {
 function setElementMetadata(elementClass, metadata) {
     elementMetadata.set(elementClass, Object.freeze(metadata));
 }
-export function setPageAuthenticationMetadata(elementClass, authentication) {
+export function setElementAuthenticationMetadata(elementClass, authentication) {
     const metadata = elementMetadata.get(elementClass);
-    if (!metadata || metadata.kind !== "page") {
-        throw new TypeError("@auth requires @page to be applied below it.");
+    if (!metadata ||
+        (metadata.kind !== "page" &&
+            metadata.kind !== "layout")) {
+        throw new TypeError("@auth requires @page or @layout to be applied below it.");
     }
     setElementMetadata(elementClass, {
         ...metadata,
-        authentication: {
+        authentication: Object.freeze({
             authenticationRequired: authentication.authenticationRequired,
-            rolesRequired: [
+            rolesRequired: Object.freeze([
                 ...authentication.rolesRequired,
-            ],
-        },
+            ]),
+        }),
     });
 }
 function requireComponentMetadata(elementClass, decoratorName) {
@@ -163,14 +165,14 @@ export function page(pathOrConfigs) {
         assertClassDecorator(context);
         const componentMetadata = requireComponentMetadata(elementClass, "page");
         const authentication = configs.authentication
-            ? {
+            ? Object.freeze({
                 authenticationRequired: configs.authentication
                     .authenticationRequired,
-                rolesRequired: [
+                rolesRequired: Object.freeze([
                     ...configs.authentication
                         .rolesRequired,
-                ],
-            }
+                ]),
+            })
             : null;
         setElementMetadata(elementClass, {
             ...componentMetadata,
@@ -200,6 +202,7 @@ export function layout(elementClass, context) {
     setElementMetadata(elementClass, {
         ...componentMetadata,
         kind: "layout",
+        authentication: null,
     });
 }
 export function getElementMetadata(elementClass) {

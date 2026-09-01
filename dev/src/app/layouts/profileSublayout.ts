@@ -1,6 +1,7 @@
-import { component, CustomElement, layout } from "joltui";
+import { auth, component, CustomElement, layout } from "joltui";
 import type FieldnotesApp from "../app";
 
+@auth()
 @layout
 @component({tagName: "profile-sublayout"})
 export default class ProfileSublayout extends CustomElement<FieldnotesApp>{

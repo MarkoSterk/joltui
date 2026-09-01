@@ -56,6 +56,7 @@ export {
 
 export type {
     Authentication,
+    RouteAuthenticationRequirement,
     Route,
     RouteExtras,
     RouteParameters,

@@ -1,6 +1,6 @@
 import App from "./app.js";
 import { CustomElement, type CustomElementClass } from "./customElement.js";
-import { type PageMetadata, type SubLayoutConfig } from "./elementMetadata.js";
+import { type AuthenticationMetadata, type LayoutMetadata, type PageMetadata, type SubLayoutConfig } from "./elementMetadata.js";
 export declare const routeEventsEnum: {
     readonly START: "route-change.start";
     readonly FINISHED: "route-change.finished";
@@ -26,8 +26,12 @@ export declare class UnsupportedRouteParameterType extends Error {
 export type RouteParameters = Record<string, string | number>;
 export type Authentication = {
     authenticationRequired: boolean;
-    rolesRequired: unknown[];
+    rolesRequired: readonly unknown[];
 };
+export type RouteAuthenticationRequirement<TApp extends App = App> = Readonly<{
+    element: CustomElementClass<TApp>;
+    authentication: AuthenticationMetadata;
+}>;
 export type MaybePromise<T> = T | Promise<T>;
 export type HandlerArgs = Record<string, unknown>;
 export type RouteExtras = Record<string, unknown>;
@@ -40,6 +44,7 @@ export type Route<TApp extends App = App> = {
     title: string | null;
     extras: RouteExtras;
     authentication: Authentication | null;
+    authenticationChain: readonly RouteAuthenticationRequirement<TApp>[];
     roles: unknown[] | null;
 };
 export type ParsedRoute<TApp extends App = App> = {
@@ -50,6 +55,7 @@ export type ParsedRoute<TApp extends App = App> = {
     title: string | null;
     extras: RouteExtras;
     authentication: Authentication | null;
+    authenticationChain: readonly RouteAuthenticationRequirement<TApp>[];
     args: HandlerArgs | null;
     roles: unknown[] | null;
     route: string;
@@ -109,6 +115,7 @@ declare class Router<TApp extends App> {
     titleGenerator(tagName: string, title: string | null): MaybePromise<string>;
     protected _discoverRoutes(): Route<TApp>[];
     protected _createRouteFromMetadata(handler: CustomElementClass<TApp>, metadata: PageMetadata<TApp>): Route<TApp>;
+    protected _createAuthenticationChain(handler: CustomElementClass<TApp>, pageMetadata: PageMetadata<TApp>, layout: CustomElementClass<TApp>, layoutMetadata: LayoutMetadata): readonly RouteAuthenticationRequirement<TApp>[];
     protected _parseRoutes(routes: readonly Route<TApp>[]): Map<string, ParsedRoute<TApp>>;
     protected _normalizePath(path: string): string;
     protected _normalizeBaseUrl(baseUrl: string): string;
@@ -118,6 +125,7 @@ declare class Router<TApp extends App> {
     protected _popStateHandler: (event: PopStateEvent) => Promise<void>;
     protected _clickHandler: (event: MouseEvent) => Promise<void>;
     route: () => Promise<void>;
+    protected _authorizeRoute: (matchedPath: MatchedRoute<TApp>) => Promise<void>;
     protected _loadPath: (matchedPath: MatchedRoute<TApp>) => Promise<void>;
     protected _renderSubLayouts(baseLayout: CustomElement<TApp>, subLayouts: readonly SubLayoutConfig<TApp>[]): Promise<CustomElement<TApp>>;
     protected _clearSubLayoutsFrom(index: number): void;
