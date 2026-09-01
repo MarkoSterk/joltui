@@ -71,7 +71,6 @@ export class DotJSEngineError extends Error {
 export class MethodExecutionError extends Error {
     protected readonly methodName: string;
     protected readonly elementName: string;
-    readonly cause?: unknown;
 
     constructor(
         methodName: string,
@@ -87,7 +86,6 @@ export class MethodExecutionError extends Error {
         this.name = "MethodExecutionError";
         this.methodName = methodName;
         this.elementName = elementName;
-        this.cause = options?.cause;
     }
 }
 
