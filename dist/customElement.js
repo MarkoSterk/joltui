@@ -372,7 +372,7 @@ export class CustomElement extends HTMLElement {
             throw new NetworkError("Failed to fetch requested content. Server unresponsive.");
         }
         if (!response.ok) {
-            return await this._checkFetchHTMLError(response);
+            return this._checkFetchHTMLError(response);
         }
         try {
             const text = await response.text();
