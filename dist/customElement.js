@@ -30,14 +30,12 @@ export class DotJSEngineError extends Error {
 export class MethodExecutionError extends Error {
     methodName;
     elementName;
-    cause;
     constructor(methodName, elementName, options) {
         super(`Failed to execute method '${methodName}' ` +
             `on element '${elementName}'`, options);
         this.name = "MethodExecutionError";
         this.methodName = methodName;
         this.elementName = elementName;
-        this.cause = options?.cause;
     }
 }
 export class ElementInitializationError extends Error {
