@@ -30,12 +30,14 @@ export class DotJSEngineError extends Error {
 export class MethodExecutionError extends Error {
     methodName;
     elementName;
+    cause;
     constructor(methodName, elementName, options) {
         super(`Failed to execute method '${methodName}' ` +
             `on element '${elementName}'`, options);
         this.name = "MethodExecutionError";
         this.methodName = methodName;
         this.elementName = elementName;
+        this.cause = options?.cause;
     }
 }
 export class ElementInitializationError extends Error {
@@ -274,11 +276,7 @@ export class CustomElement extends HTMLElement {
         await Promise.all(Array.from(dependencies, dependency => dependency.load()));
     }
     async _handleError(error) {
-        if (this._app) {
-            await this._app.handleErrorOnce(error);
-            return;
-        }
-        console.error(error);
+        await this.app.handleErrorOnce(error);
     }
     async _runLifecycle(stage) {
         for (const { name, method } of getLifecycleMethods(this, stage)) {
@@ -516,8 +514,7 @@ export class CustomElement extends HTMLElement {
             }
         }
         catch (error) {
-            console.error(error);
-            await this._handleError(new MethodExecutionError(methodName, this.tagName));
+            await this._handleError(new MethodExecutionError(methodName, this.tagName, { cause: error }));
         }
     }
     _getAllArgs(element) {

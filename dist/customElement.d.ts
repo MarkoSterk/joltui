@@ -18,6 +18,7 @@ export declare class DotJSEngineError extends Error {
 export declare class MethodExecutionError extends Error {
     protected readonly methodName: string;
     protected readonly elementName: string;
+    readonly cause?: unknown;
     constructor(methodName: string, elementName: string, options?: ErrorOptions);
 }
 export type InitializationState = "pending" | "fulfilled" | "rejected";
