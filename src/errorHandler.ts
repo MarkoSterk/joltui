@@ -132,17 +132,28 @@ export default class ErrorHandler<TApp extends App> {
     }
 
     async handle(error: Error): Promise<boolean> {
-        let errorType: Function | null = error.constructor;
+        let currentError: Error | null = error;
 
-        while (errorType && errorType !== Object) {
-            const handler = this._handlerMethods[errorType.name];
+        while (currentError) {
+            let errorType: Function | null =
+                currentError.constructor;
 
-            if (handler) {
-                await handler(error);
-                return true;
+            while (errorType && errorType !== Object) {
+                const handler =
+                    this._handlerMethods[errorType.name];
+
+                if (handler) {
+                    await handler(currentError);
+                    return true;
+                }
+
+                errorType = Object.getPrototypeOf(errorType);
             }
 
-            errorType = Object.getPrototypeOf(errorType);
+            currentError =
+                currentError.cause instanceof Error
+                    ? currentError.cause
+                    : null;
         }
 
         return false;

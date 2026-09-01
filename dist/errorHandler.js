@@ -56,14 +56,21 @@ export default class ErrorHandler {
         return handlers;
     }
     async handle(error) {
-        let errorType = error.constructor;
-        while (errorType && errorType !== Object) {
-            const handler = this._handlerMethods[errorType.name];
-            if (handler) {
-                await handler(error);
-                return true;
+        let currentError = error;
+        while (currentError) {
+            let errorType = currentError.constructor;
+            while (errorType && errorType !== Object) {
+                const handler = this._handlerMethods[errorType.name];
+                if (handler) {
+                    await handler(currentError);
+                    return true;
+                }
+                errorType = Object.getPrototypeOf(errorType);
             }
-            errorType = Object.getPrototypeOf(errorType);
+            currentError =
+                currentError.cause instanceof Error
+                    ? currentError.cause
+                    : null;
         }
         return false;
     }

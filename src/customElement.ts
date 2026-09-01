@@ -21,7 +21,15 @@ import {
 import type {
     LazyDependency,
 } from "./lazy.js";
-import { AuthenticationError, AuthorizationError, InternalServerError, NetworkError, ServerComponentNotFound, ServerComponentBadRequestResponse } from "./errors.js";
+import {
+    AuthenticationError,
+    AuthorizationError,
+    HttpRequestError,
+    InternalServerError,
+    NetworkError,
+    ServerComponentNotFound,
+    ServerComponentBadRequestResponse,
+} from "./errors.js";
 
 export class RenderError extends Error {
     protected readonly elementName: string;
@@ -731,7 +739,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             );
         }
         if (!response.ok) {
-            return await this._checkFetchHTMLError(response);
+            return this._checkFetchHTMLError(response);
         }
         try {
             const text = await response.text();
@@ -753,44 +761,24 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
     };
 
-    _checkFetchHTMLError = async (response: Response): Promise<string> => {
-        const contentType = response.headers.get("content-type") ?? "";
-        if (contentType.includes("text/html")) {
-            try{
-                const text = await response.text();
-                if (text.trim().length === 0) {
-                    throw new MarkupFetchError(
-                        "Fetched HTML markup was empty for a non-2xx response.",
-                        this.tagName
-                    );
-                }
-                return text;
-            } catch(error: unknown){
-                if (error instanceof MarkupFetchError) {
-                    throw error;
-                }
-                throw new MarkupFetchError(
-                    "Failed to read fetched html markup for non-2xx responses.",
-                    this.tagName
-                );
-            }
-        }
+    _checkFetchHTMLError = (response: Response): never => {
+        const requestedPath =
+            `${location.pathname}${location.search}`;
+
         if(response.status >= 500){
             throw new InternalServerError(`Server component fetch failed with status ${response.status}`);
         }
         switch(response.status){
-            // Non-HTML error responses are converted to status-specific errors.
             case 400:
                 throw new ServerComponentBadRequestResponse(this.tagName.toLowerCase(), this.groupName || "default");
             case 401:   
-                throw new AuthenticationError("Missing authentication for requested route");
+                throw new AuthenticationError(requestedPath);
             case 403:
-                throw new AuthorizationError("User is not authorized for this route", []);
+                throw new AuthorizationError(requestedPath, []);
             case 404:
                 throw new ServerComponentNotFound(this.tagName.toLowerCase(), this.groupName || "default")
             default:
-                //throw generic error with response code
-                throw new Error(`Failed to fetch component content. Server responded with status ${response.status}`);
+                throw new HttpRequestError("POST", response);
         }
     }
 
