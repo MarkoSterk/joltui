@@ -71,6 +71,7 @@ export class DotJSEngineError extends Error {
 export class MethodExecutionError extends Error {
     protected readonly methodName: string;
     protected readonly elementName: string;
+    readonly cause?: unknown;
 
     constructor(
         methodName: string,
@@ -86,6 +87,7 @@ export class MethodExecutionError extends Error {
         this.name = "MethodExecutionError";
         this.methodName = methodName;
         this.elementName = elementName;
+        this.cause = options?.cause;
     }
 }
 
@@ -605,12 +607,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     protected async _handleError(
         error: unknown,
     ): Promise<void> {
-        if (this._app) {
-            await this._app.handleErrorOnce(error);
-            return;
-        }
-
-        console.error(error);
+        await this.app.handleErrorOnce(error);
     }
 
     protected async _runLifecycle(
@@ -1039,12 +1036,11 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                 );
             }
         } catch (error: unknown) {
-            console.error(error);
-
             await this._handleError(
                 new MethodExecutionError(
                     methodName,
                     this.tagName,
+                    { cause: error },
                 ),
             );
         }
