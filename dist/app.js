@@ -3,6 +3,23 @@ import ErrorHandler, {} from "./errorHandler.js";
 import { CustomElement, } from "./customElement.js";
 import { transformSelector } from "./selectorParser/index.js";
 import { Lifecycle, getLifecycleMethods, } from "./lifecycle.js";
+let prototypeMethodsModified = false;
+function normalizeJoltAttributeName(name) {
+    if (!name.startsWith(":")) {
+        return name;
+    }
+    const shorthandName = name.substring(1);
+    if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(shorthandName)) {
+        throw new DOMException(`Invalid JoltUI attribute name '${name}'.`, "InvalidCharacterError");
+    }
+    return `data-jolt-${shorthandName}`;
+}
+function getAttributeBindingName(normalizedName) {
+    const attributeName = normalizedName.startsWith("data-jolt-")
+        ? normalizedName.substring("data-jolt-".length)
+        : normalizedName;
+    return `attr.${attributeName}`;
+}
 export const dataEventEnum = {
     CHANGE: "app-data-change",
     QUERY_CHANGE: "query-parameter-change",
@@ -71,6 +88,8 @@ class App {
     _originalSetAttribute;
     _originalGetAttribute;
     _originalRemoveAttribute;
+    _originalHasAttribute;
+    _originalToggleAttribute;
     _originalDocQS;
     _originalDocQSA;
     _originalElQS;
@@ -110,12 +129,16 @@ class App {
             Element.prototype
                 .insertAdjacentHTML;
         this._originalSetAttribute =
-            HTMLElement.prototype.setAttribute;
+            Element.prototype.setAttribute;
         this._originalGetAttribute =
-            HTMLElement.prototype.getAttribute;
+            Element.prototype.getAttribute;
         this._originalRemoveAttribute =
-            HTMLElement.prototype
+            Element.prototype
                 .removeAttribute;
+        this._originalHasAttribute =
+            Element.prototype.hasAttribute;
+        this._originalToggleAttribute =
+            Element.prototype.toggleAttribute;
         this._originalDocQS =
             Document.prototype.querySelector;
         this._originalDocQSA =
@@ -295,22 +318,43 @@ class App {
             .insertAdjacentHTML(position, markup);
     }
     _modifyPrototypeMethods = () => {
+        if (prototypeMethodsModified) {
+            return;
+        }
         const appInstance = this;
-        const normalizeAttributeName = (name) => {
-            if (!name.startsWith(":")) {
-                return name;
+        Element.prototype.setAttribute = function (name, value) {
+            const normalizedName = normalizeJoltAttributeName(name);
+            const previousValue = appInstance._originalGetAttribute.call(this, normalizedName);
+            appInstance._originalSetAttribute.call(this, normalizedName, value);
+            if (this instanceof CustomElement &&
+                previousValue !== value) {
+                this._refreshBoundElements(getAttributeBindingName(normalizedName));
             }
-            return (`data-jolt-` +
-                name.substring(1).trim());
         };
-        HTMLElement.prototype.setAttribute = function (name, value) {
-            appInstance._originalSetAttribute.call(this, normalizeAttributeName(name), value);
+        Element.prototype.removeAttribute = function (name) {
+            const normalizedName = normalizeJoltAttributeName(name);
+            const attributeExisted = appInstance._originalHasAttribute.call(this, normalizedName);
+            appInstance._originalRemoveAttribute.call(this, normalizedName);
+            if (this instanceof CustomElement &&
+                attributeExisted) {
+                this._refreshBoundElements(getAttributeBindingName(normalizedName));
+            }
         };
-        HTMLElement.prototype.removeAttribute = function (name) {
-            appInstance._originalRemoveAttribute.call(this, normalizeAttributeName(name));
+        Element.prototype.getAttribute = function (name) {
+            return appInstance._originalGetAttribute.call(this, normalizeJoltAttributeName(name));
         };
-        HTMLElement.prototype.getAttribute = function (name) {
-            return appInstance._originalGetAttribute.call(this, normalizeAttributeName(name));
+        Element.prototype.hasAttribute = function (name) {
+            return appInstance._originalHasAttribute.call(this, normalizeJoltAttributeName(name));
+        };
+        Element.prototype.toggleAttribute = function (name, force) {
+            const normalizedName = normalizeJoltAttributeName(name);
+            const existedBefore = appInstance._originalHasAttribute.call(this, normalizedName);
+            const existsAfter = appInstance._originalToggleAttribute.call(this, normalizedName, force);
+            if (this instanceof CustomElement &&
+                existedBefore !== existsAfter) {
+                this._refreshBoundElements(getAttributeBindingName(normalizedName));
+            }
+            return existsAfter;
         };
         const elementsBetween = (first, end) => {
             const elements = [];
@@ -422,6 +466,7 @@ class App {
             const newSelector = transformSelector(selector);
             return appInstance._originalElQSA.call(this, newSelector);
         };
+        prototypeMethodsModified = true;
     };
     getRequiredSetter(prototype, propertyName) {
         const descriptor = Object.getOwnPropertyDescriptor(prototype, propertyName);

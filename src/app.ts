@@ -11,6 +11,45 @@ import {
     getLifecycleMethods,
 } from "./lifecycle.js";
 
+let prototypeMethodsModified = false;
+
+function normalizeJoltAttributeName(
+    name: string,
+): string {
+    if (!name.startsWith(":")) {
+        return name;
+    }
+
+    const shorthandName = name.substring(1);
+
+    if (
+        !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(
+            shorthandName,
+        )
+    ) {
+        throw new DOMException(
+            `Invalid JoltUI attribute name '${name}'.`,
+            "InvalidCharacterError",
+        );
+    }
+
+    return `data-jolt-${shorthandName}`;
+}
+
+function getAttributeBindingName(
+    normalizedName: string,
+): string {
+    const attributeName = normalizedName.startsWith(
+        "data-jolt-",
+    )
+        ? normalizedName.substring(
+            "data-jolt-".length,
+        )
+        : normalizedName;
+
+    return `attr.${attributeName}`;
+}
+
 export const dataEventEnum = {
     CHANGE: "app-data-change",
     QUERY_CHANGE: "query-parameter-change",
@@ -194,13 +233,19 @@ class App<
         typeof Element.prototype.insertAdjacentHTML;
 
     protected readonly _originalSetAttribute:
-        typeof HTMLElement.prototype.setAttribute;
+        typeof Element.prototype.setAttribute;
 
     protected readonly _originalGetAttribute:
-        typeof HTMLElement.prototype.getAttribute;
+        typeof Element.prototype.getAttribute;
 
     protected readonly _originalRemoveAttribute:
-        typeof HTMLElement.prototype.removeAttribute;
+        typeof Element.prototype.removeAttribute;
+
+    protected readonly _originalHasAttribute:
+        typeof Element.prototype.hasAttribute;
+
+    protected readonly _originalToggleAttribute:
+        typeof Element.prototype.toggleAttribute;
 
     protected readonly _originalDocQS:
         typeof Document.prototype.querySelector;
@@ -291,14 +336,20 @@ class App<
                 .insertAdjacentHTML;
 
         this._originalSetAttribute =
-            HTMLElement.prototype.setAttribute;
+            Element.prototype.setAttribute;
 
         this._originalGetAttribute =
-            HTMLElement.prototype.getAttribute;
+            Element.prototype.getAttribute;
 
         this._originalRemoveAttribute =
-            HTMLElement.prototype
+            Element.prototype
                 .removeAttribute;
+
+        this._originalHasAttribute =
+            Element.prototype.hasAttribute;
+
+        this._originalToggleAttribute =
+            Element.prototype.toggleAttribute;
 
         this._originalDocQS =
             Document.prototype.querySelector;
@@ -768,48 +819,118 @@ class App<
     }
 
     protected _modifyPrototypeMethods = () => {
+        if (prototypeMethodsModified) {
+            return;
+        }
+
         const appInstance = this;
 
-        const normalizeAttributeName = (
-            name: string,
-        ): string => {
-            if (!name.startsWith(":")) {
-                return name;
-            }
-
-            return (
-                `data-jolt-` +
-                name.substring(1).trim()
-            );
-        };
-
-        HTMLElement.prototype.setAttribute = function(
+        Element.prototype.setAttribute = function(
             name: string,
             value: string,
         ): void {
+            const normalizedName =
+                normalizeJoltAttributeName(name);
+            const previousValue =
+                appInstance._originalGetAttribute.call(
+                    this,
+                    normalizedName,
+                );
+
             appInstance._originalSetAttribute.call(
                 this,
-                normalizeAttributeName(name),
+                normalizedName,
                 value,
             );
+
+            if (
+                this instanceof CustomElement &&
+                previousValue !== value
+            ) {
+                this._refreshBoundElements(
+                    getAttributeBindingName(
+                        normalizedName,
+                    ),
+                );
+            }
         };
 
-        HTMLElement.prototype.removeAttribute = function(
+        Element.prototype.removeAttribute = function(
             name: string,
         ): void {
+            const normalizedName =
+                normalizeJoltAttributeName(name);
+            const attributeExisted =
+                appInstance._originalHasAttribute.call(
+                    this,
+                    normalizedName,
+                );
+
             appInstance._originalRemoveAttribute.call(
                 this,
-                normalizeAttributeName(name),
+                normalizedName,
             );
+
+            if (
+                this instanceof CustomElement &&
+                attributeExisted
+            ) {
+                this._refreshBoundElements(
+                    getAttributeBindingName(
+                        normalizedName,
+                    ),
+                );
+            }
         };
 
-        HTMLElement.prototype.getAttribute = function(
+        Element.prototype.getAttribute = function(
             name: string,
         ): string | null {
             return appInstance._originalGetAttribute.call(
                 this,
-                normalizeAttributeName(name),
+                normalizeJoltAttributeName(name),
             );
+        };
+
+        Element.prototype.hasAttribute = function(
+            name: string,
+        ): boolean {
+            return appInstance._originalHasAttribute.call(
+                this,
+                normalizeJoltAttributeName(name),
+            );
+        };
+
+        Element.prototype.toggleAttribute = function(
+            name: string,
+            force?: boolean,
+        ): boolean {
+            const normalizedName =
+                normalizeJoltAttributeName(name);
+            const existedBefore =
+                appInstance._originalHasAttribute.call(
+                    this,
+                    normalizedName,
+                );
+            const existsAfter =
+                appInstance._originalToggleAttribute.call(
+                this,
+                normalizedName,
+                force,
+            );
+
+            if (
+                this instanceof CustomElement &&
+                existedBefore !== existsAfter
+            ) {
+                this._refreshBoundElements(
+                    getAttributeBindingName(
+                        normalizedName,
+                    ),
+                );
+            }
+
+            return existsAfter;
         };
 
         const elementsBetween = (
@@ -955,6 +1076,8 @@ class App<
             const newSelector = transformSelector(selector)
             return appInstance._originalElQSA.call(this, newSelector);
         };
+
+        prototypeMethodsModified = true;
 
     }
 

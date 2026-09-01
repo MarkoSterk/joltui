@@ -52,9 +52,11 @@ declare class App<TApp extends App<TApp> = any> {
     protected readonly _originalInnerHTML: ElementHtmlSetter;
     protected readonly _originalOuterHTML: ElementHtmlSetter;
     protected readonly _originalInsertAdjacentHTML: typeof Element.prototype.insertAdjacentHTML;
-    protected readonly _originalSetAttribute: typeof HTMLElement.prototype.setAttribute;
-    protected readonly _originalGetAttribute: typeof HTMLElement.prototype.getAttribute;
-    protected readonly _originalRemoveAttribute: typeof HTMLElement.prototype.removeAttribute;
+    protected readonly _originalSetAttribute: typeof Element.prototype.setAttribute;
+    protected readonly _originalGetAttribute: typeof Element.prototype.getAttribute;
+    protected readonly _originalRemoveAttribute: typeof Element.prototype.removeAttribute;
+    protected readonly _originalHasAttribute: typeof Element.prototype.hasAttribute;
+    protected readonly _originalToggleAttribute: typeof Element.prototype.toggleAttribute;
     protected readonly _originalDocQS: typeof Document.prototype.querySelector;
     protected readonly _originalDocQSA: typeof Document.prototype.querySelectorAll;
     protected readonly _originalElQS: typeof Element.prototype.querySelector;
