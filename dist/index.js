@@ -3,6 +3,7 @@ export { component, page, layout, getElementMetadata, requireElementMetadata, } 
 export { default as CustomElement, html } from "./customElement.js";
 export { default as Router, routeEventsEnum, } from "./router.js";
 export { auth } from "./auth.js";
+export { ElementDisconnectedError, isElementCancellation, } from "./cancellation.js";
 export { lifecycle, Lifecycle } from "./lifecycle.js";
 export { react, reactFactory, queryParam, select, selectAll } from "./properties.js";
 export { default as ErrorHandler, handles } from "./errorHandler.js";

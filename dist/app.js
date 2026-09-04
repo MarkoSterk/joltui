@@ -1,4 +1,5 @@
 import Router from "./router.js";
+import { isElementCancellation } from "./cancellation.js";
 import ErrorHandler, {} from "./errorHandler.js";
 import { CustomElement, } from "./customElement.js";
 import { transformSelector } from "./selectorParser/index.js";
@@ -284,6 +285,8 @@ class App {
             .matches(selector);
     }
     handleError = async (error) => {
+        if (isElementCancellation(error))
+            return;
         if (!(error instanceof Error)) {
             throw new Error("Failed to handle error. Provided instance is not an instance of Error.");
         }

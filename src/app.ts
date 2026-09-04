@@ -1,4 +1,5 @@
 import Router from "./router.js";
+import { isElementCancellation } from "./cancellation.js";
 import ErrorHandler, {
     type ErrorHandlerClass,
 } from "./errorHandler.js";
@@ -696,6 +697,7 @@ class App<
     handleError = async (
         error: unknown,
     ): Promise<void> => {
+        if (isElementCancellation(error)) return;
         if (!(error instanceof Error)) {
             throw new Error("Failed to handle error. Provided instance is not an instance of Error.");
         }

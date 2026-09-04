@@ -2,6 +2,11 @@ import App, {
     type AppContainer,
     dataEventEnum,
 } from "./app.js";
+import {
+    awaitWithSignal,
+    ElementDisconnectedError,
+    isElementCancellation,
+} from "./cancellation.js";
 
 import doT, {
     type DoTDataBindTemplates,
@@ -280,17 +285,17 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
     protected _abort = false;
 
+    protected readonly _abortController = new AbortController();
+
+    get abortSignal(): AbortSignal {
+        return this._abortController.signal;
+    }
+
     readonly initComplete: Promise<void>;
 
     rndId: number;
 
     hashId = "";
-
-    // markup: MarkupMethod = function (
-    //     this: CustomElement,
-    // ): never {
-    //     throw new MissingMarkupMethod(this.tagName);
-    // };
 
     markup: MarkupMethod | null = null;
 
@@ -310,6 +315,11 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             () => undefined,
         );
 
+        this.abortSignal.addEventListener("abort", () => {
+            this._abort = true;
+            this._failInitialization(this.abortSignal.reason);
+        }, { once: true });
+
     }
 
     async connectedCallback(): Promise<void> {
@@ -324,10 +334,15 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             this._completeInitialization();
             return;
         }
-        await this.initElement();
+        try {
+            await this.initElement();
+        } catch (error) {
+            if (!isElementCancellation(error)) throw error;
+        }
     }
 
     disconnectedCallback(): void {
+        this._abortController.abort(new ElementDisconnectedError());
         if (!this._app) {
             return;
         }
@@ -345,7 +360,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
         void this._runLifecycle(
             Lifecycle.AFTER_DISCONNECT
-        );
+        ).catch(error => this.app.handleErrorOnce(error));
     }
 
     initElement = (): Promise<void> => {
@@ -358,13 +373,14 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
 
         this._initializationTask =
-            this._initializeElement();
+            awaitWithSignal(this._initializeElement(), this.abortSignal);
 
         return this._initializationTask;
     };
 
     protected _initializeElement = async (): Promise<void> => {
         try {
+            this.abortSignal.throwIfAborted();
             this._abort = false;
 
             const appContainer =
@@ -419,23 +435,18 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                 }
             }
 
-
             this._templateSettings =
                 createTemplateSettings();
 
-            await this._loadDependencies();
+            await awaitWithSignal(this._loadDependencies(), this.abortSignal);
 
-            if (this._completeIfAborted()) {
-                return;
-            }
+            this._throwIfInitializationAborted();
 
             await this._runLifecycle(
                 Lifecycle.BEFORE_INIT
             );
 
-            if (this._completeIfAborted()) {
-                return;
-            }
+            this._throwIfInitializationAborted();
 
             this.app.addEventListener(
                 dataEventEnum.CHANGE,
@@ -453,19 +464,17 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
             await this.render();
 
-            if (this._completeIfAborted()) {
-                return;
-            }
+            this._throwIfInitializationAborted();
 
             await this._waitForSubelements();
 
-            if (this._completeIfAborted()) {
-                return;
-            }
+            this._throwIfInitializationAborted();
 
             await this._runLifecycle(
                 Lifecycle.BEFORE_INIT_RESOLVE,
             );
+
+            this.abortSignal.throwIfAborted();
 
             this._completeInitialization();
 
@@ -474,6 +483,14 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             );
         } catch (error: unknown) {
             this._abort = true;
+
+            if (this.abortSignal.aborted || isElementCancellation(error)) {
+                const cancellation = this.abortSignal.aborted
+                    ? this.abortSignal.reason
+                    : error;
+                this._failInitialization(cancellation as Error);
+                throw cancellation;
+            }
 
             if (
                 this._initializationState ===
@@ -529,13 +546,15 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         this._rejectInitialization = null;
     }
 
-    protected _completeIfAborted(): boolean {
+    protected _throwIfInitializationAborted(): void {
         if (!this._abort && this.isConnected) {
-            return false;
+            return;
         }
 
-        this._completeInitialization();
-        return true;
+        if (!this.abortSignal.aborted) {
+            this._abortController.abort(new ElementDisconnectedError());
+        }
+        this.abortSignal.throwIfAborted();
     }
 
     protected async _loadDependencies(): Promise<void> {
@@ -605,16 +624,29 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     protected async _handleError(
         error: unknown,
     ): Promise<void> {
+        if (this.abortSignal.aborted || isElementCancellation(error)) return;
         await this.app.handleErrorOnce(error);
     }
 
     protected async _runLifecycle(
         stage: Lifecycle,
     ): Promise<void> {
+        const disconnecting = stage === Lifecycle.AFTER_DISCONNECT;
+        if (!disconnecting) this.abortSignal.throwIfAborted();
         for (const { name, method } of getLifecycleMethods(this, stage)) {
             try {
-                await method.call(this);
+                if (disconnecting) {
+                    await method.call(this);
+                } else {
+                    this.abortSignal.throwIfAborted();
+                    await awaitWithSignal(
+                        Promise.resolve(method.call(this)),
+                        this.abortSignal,
+                    );
+                    this.abortSignal.throwIfAborted();
+                }
             } catch (error: unknown) {
+                if (isElementCancellation(error)) throw error;
                 throw new MethodExecutionError(
                     name,
                     this.tagName,
@@ -622,6 +654,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                 );
             }
         }
+        if (!disconnecting) this.abortSignal.throwIfAborted();
     }
 
     protected async _markup(): Promise<string> {
@@ -631,6 +664,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             }
             return await this.markup.call(this);
         } catch (error: unknown) {
+            if (isElementCancellation(error)) throw error;
             if (
                 error instanceof
                 MissingMarkupMethod
@@ -650,9 +684,12 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
     render = async (): Promise<void> => {
         try {
-            const renderTemplate = async (): Promise<string> => {
+            this.abortSignal.throwIfAborted();
+            const renderTemplate = async (
+                signal: AbortSignal | null = this.abortSignal,
+            ): Promise<string> => {
                 if(this.useServer){
-                    return await this._fetchHTML();
+                    return await this._fetchHTML(signal);
                 }
                 if (!this.markup) {
                     const markup = this.innerHTML.trim();
@@ -682,16 +719,17 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                     this.app.templatesCacheDuration;
 
                 renderedHtml = cacheDuration > 0
-                    ? await this.app.getOrSetCachedTemplate(
+                    ? await awaitWithSignal(this.app.getOrSetCachedTemplate(
                         cacheKey,
                         cacheDuration,
-                        renderTemplate,
-                    )
-                    : await renderTemplate();
+                        () => renderTemplate(null),
+                    ), this.abortSignal)
+                    : await awaitWithSignal(renderTemplate(), this.abortSignal);
             } else {
-                renderedHtml = await renderTemplate();
+                renderedHtml = await awaitWithSignal(renderTemplate(), this.abortSignal);
             }
 
+            this.abortSignal.throwIfAborted();
             this.innerHTML = renderedHtml;
         } catch (error: unknown) {
             this._abort = true;
@@ -700,17 +738,23 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
     };
 
-    _fetchHTML = async (): Promise<string> => {
+    _fetchHTML = async (
+        signal: AbortSignal | null = this.abortSignal,
+    ): Promise<string> => {
         return await this.fetchHTML({
             tagName: this.tagName.toLowerCase(),
             groupName: this.groupName == null ? "default" : this.groupName,
             queryParameters: this.app.queryParameters || {},
             routeParameters: this.app?.router.routeParameters || {},
             attributes: this.args,
-        });
+        }, signal);
     }
 
-    fetchHTML = async (request: FetchHtmlRequest): Promise<string> => {
+    fetchHTML = async (
+        request: FetchHtmlRequest,
+        signal: AbortSignal | null = this.abortSignal,
+    ): Promise<string> => {
+        signal?.throwIfAborted();
         if (!this.app.serverComponentsUrl) {
             throw new Error(
                 "If using server components you need to provide the " +
@@ -721,6 +765,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         try {
             response = await fetch(this.app.serverComponentsUrl, {
                 method: "POST",
+                signal,
                 credentials: "include",
                 headers: {
                     "Content-Type": "application/json",
@@ -729,15 +774,18 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                 body: JSON.stringify(request)
             });
         } catch {
+            signal?.throwIfAborted();
             throw new NetworkError(
                 "Failed to fetch requested content. Server unresponsive."
             );
         }
+        signal?.throwIfAborted();
         if (!response.ok) {
             return this._checkFetchHTMLError(response);
         }
         try {
             const text = await response.text();
+            signal?.throwIfAborted();
             if(text.trim().length === 0){
                 throw new MarkupFetchError(
                     "Fetched HTML markup was empty for a 2xx response.",
@@ -746,6 +794,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             }
             return text;
         } catch(error: unknown){
+            signal?.throwIfAborted();
             if (error instanceof MarkupFetchError) {
                 throw error;
             }
@@ -779,6 +828,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
     rerender = async (): Promise<void> => {
         try {
+            this.abortSignal.throwIfAborted();
             this._templateSettings.dataBinds.clear();
 
             await this._runLifecycle(
@@ -798,6 +848,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             );
         } catch (error: unknown) {
             this._abort = true;
+            if (this.abortSignal.aborted) throw this.abortSignal.reason;
             await this._handleError(error);
             throw error;
         }
@@ -806,6 +857,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     protected async _waitForSubelements(): Promise<
         void
     > {
+        this.abortSignal.throwIfAborted();
         const customElements = Array.from(
             this.querySelectorAll("*"),
         ).filter(
@@ -815,11 +867,11 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                 element instanceof CustomElement,
         );
 
-        await Promise.all(
+        await awaitWithSignal(Promise.all(
             customElements.map(
                 element => element.initComplete,
             ),
-        );
+        ), this.abortSignal);
     }
 
     generateHash(
@@ -865,7 +917,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     _refreshBoundElements(
         propertyName: string,
     ): void {
-        this._renderTime = Date.now();
+        if (this.abortSignal.aborted) return;
         const templates =
             this._templateSettings.dataBinds.get(
                 propertyName,
@@ -875,9 +927,12 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             return;
         }
 
+        this._renderTime = Date.now();
+
         this.querySelectorAll<HTMLElement>(
             `[data-bind="${propertyName}"]`,
         ).forEach(element => {
+            if (this.abortSignal.aborted) return;
             const elementId =
                 element.getAttribute(
                     "data-bind-id",
@@ -901,6 +956,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                 this._renderTime.toString(),
             );
 
+            if (this.abortSignal.aborted) return;
             element.innerHTML =
                 elementTemplate;
         });
@@ -996,6 +1052,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         event: Event,
     ): Promise<void> {
         try {
+            this.abortSignal.throwIfAborted();
             const args =
                 this._getAllArgs(element);
 
@@ -1022,16 +1079,16 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             if (
                 Object.keys(args).length > 0
             ) {
-                await boundMethod.call(
+                await awaitWithSignal(Promise.resolve(boundMethod.call(
                     this,
                     event,
                     args,
-                );
+                )), this.abortSignal);
             } else {
-                await boundMethod.call(
+                await awaitWithSignal(Promise.resolve(boundMethod.call(
                     this,
                     event,
-                );
+                )), this.abortSignal);
             }
         } catch (error: unknown) {
             await this._handleError(

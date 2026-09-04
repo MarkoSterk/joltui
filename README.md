@@ -423,6 +423,53 @@ await this.app.router.redirect("/search", {
 
 The redirect throws a `RouteParametersError` when a required base parameter is missing, empty, or invalid. Setting `useBaseUrl` to `false`, or omitting the options object, preserves the redirect path exactly as supplied.
 
+## Component lifetime and cancellation
+
+Every `CustomElement` exposes a read-only `abortSignal`. Disconnecting the element
+from the DOM aborts that signal and ends the instance's lifetime. Use it for manual
+requests, including requests made by event handlers:
+
+```ts
+async loadDetails(): Promise<void> {
+    const response = await fetch("/api/details", {
+        signal: this.abortSignal,
+    });
+    const details = await response.json();
+    this.abortSignal.throwIfAborted();
+    // Update the component using details.
+}
+```
+
+Pending `initComplete` and `initElement()` promises reject promptly with
+`ElementDisconnectedError`. Cancellation is not sent to application error handlers,
+including when it propagates through parent initialization or router rendering.
+Successful initialization still resolves `initComplete` immediately before
+`AFTER_INIT`. Once fulfilled, that promise is not changed by later disconnection.
+`AFTER_DISCONNECT` cleanup hooks still run with an already-aborted lifetime signal.
+
+Element-owned HTML requests use the lifetime signal automatically. In-progress
+app-wide cached template requests are shared: disconnecting one element cancels
+only its wait, not the shared fetch. Other consumers still receive the result and
+the successful response can populate the cache. `fetchHTML(request, signal)` and
+`_fetchHTML(signal)` accept an optional signal; `null` means an independent request
+and is used internally for shared cache work. Overrides must forward that signal.
+
+Rendering checks cancellation before committing markup. `rerender()` rejects on
+cancellation; synchronous attribute/data-binding refreshes become no-ops after
+cancellation. Dynamic imports and arbitrary asynchronous application code cannot
+be forcibly stopped: pass the signal to cancellable APIs and call
+`this.abortSignal.throwIfAborted()` after other awaits before making side effects.
+Avoid tying an app-wide cached markup factory to one component's lifetime signal.
+
+When calling `initElement()` or `rerender()` directly, callers may distinguish
+expected cancellation using the exported `isElementCancellation(error)` helper.
+JoltUI's managed event/lifecycle paths already do this. Unrelated errors still use
+the normal error-handler path.
+
+Reconnecting the same disconnected instance is not supported. Create a new
+element instance instead. Ordinary DOM moves that invoke `disconnectedCallback`
+also end its lifetime, so do not detach and reinsert instances to preserve state.
+
 ## Authentication and authorization
 
 Apply `@auth()` to pages or layouts to require authentication, or provide roles:

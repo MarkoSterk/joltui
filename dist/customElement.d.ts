@@ -85,6 +85,8 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _renderTime: number;
     protected _lastRender: number;
     protected _abort: boolean;
+    protected readonly _abortController: AbortController;
+    get abortSignal(): AbortSignal;
     readonly initComplete: Promise<void>;
     rndId: number;
     hashId: string;
@@ -96,15 +98,15 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _initializeElement: () => Promise<void>;
     protected _completeInitialization(): void;
     protected _failInitialization(error: Error): void;
-    protected _completeIfAborted(): boolean;
+    protected _throwIfInitializationAborted(): void;
     protected _loadDependencies(): Promise<void>;
     protected _handleError(error: unknown): Promise<void>;
     protected _runLifecycle(stage: Lifecycle): Promise<void>;
     protected _markup(): Promise<string>;
     templateCacheKey(): string;
     render: () => Promise<void>;
-    _fetchHTML: () => Promise<string>;
-    fetchHTML: (request: FetchHtmlRequest) => Promise<string>;
+    _fetchHTML: (signal?: AbortSignal | null) => Promise<string>;
+    fetchHTML: (request: FetchHtmlRequest, signal?: AbortSignal | null) => Promise<string>;
     _checkFetchHTMLError: (response: Response) => never;
     rerender: () => Promise<void>;
     protected _waitForSubelements(): Promise<void>;

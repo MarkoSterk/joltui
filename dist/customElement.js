@@ -1,4 +1,5 @@
 import App, { dataEventEnum, } from "./app.js";
+import { awaitWithSignal, ElementDisconnectedError, isElementCancellation, } from "./cancellation.js";
 import doT, {} from "./dotjs/dot.js";
 import { Lifecycle, getLifecycleMethods, } from "./lifecycle.js";
 import { requireElementMetadata, } from "./elementMetadata.js";
@@ -99,14 +100,13 @@ export class CustomElement extends HTMLElement {
     _renderTime = 0;
     _lastRender = 0;
     _abort = false;
+    _abortController = new AbortController();
+    get abortSignal() {
+        return this._abortController.signal;
+    }
     initComplete;
     rndId;
     hashId = "";
-    // markup: MarkupMethod = function (
-    //     this: CustomElement,
-    // ): never {
-    //     throw new MissingMarkupMethod(this.tagName);
-    // };
     markup = null;
     constructor() {
         super();
@@ -116,6 +116,10 @@ export class CustomElement extends HTMLElement {
             this._rejectInitialization = reject;
         });
         void this.initComplete.catch(() => undefined);
+        this.abortSignal.addEventListener("abort", () => {
+            this._abort = true;
+            this._failInitialization(this.abortSignal.reason);
+        }, { once: true });
     }
     async connectedCallback() {
         if (this._initializationState !== "pending" ||
@@ -126,9 +130,16 @@ export class CustomElement extends HTMLElement {
             this._completeInitialization();
             return;
         }
-        await this.initElement();
+        try {
+            await this.initElement();
+        }
+        catch (error) {
+            if (!isElementCancellation(error))
+                throw error;
+        }
     }
     disconnectedCallback() {
+        this._abortController.abort(new ElementDisconnectedError());
         if (!this._app) {
             return;
         }
@@ -138,7 +149,7 @@ export class CustomElement extends HTMLElement {
         if (this.dataField) {
             this.app.removeDataListener(this);
         }
-        void this._runLifecycle(Lifecycle.AFTER_DISCONNECT);
+        void this._runLifecycle(Lifecycle.AFTER_DISCONNECT).catch(error => this.app.handleErrorOnce(error));
     }
     initElement = () => {
         if (this._initializationTask) {
@@ -148,11 +159,12 @@ export class CustomElement extends HTMLElement {
             return this.initComplete;
         }
         this._initializationTask =
-            this._initializeElement();
+            awaitWithSignal(this._initializeElement(), this.abortSignal);
         return this._initializationTask;
     };
     _initializeElement = async () => {
         try {
+            this.abortSignal.throwIfAborted();
             this._abort = false;
             const appContainer = this.closest("[app-id]");
             if (!appContainer?.app) {
@@ -177,33 +189,33 @@ export class CustomElement extends HTMLElement {
             }
             this._templateSettings =
                 createTemplateSettings();
-            await this._loadDependencies();
-            if (this._completeIfAborted()) {
-                return;
-            }
+            await awaitWithSignal(this._loadDependencies(), this.abortSignal);
+            this._throwIfInitializationAborted();
             await this._runLifecycle(Lifecycle.BEFORE_INIT);
-            if (this._completeIfAborted()) {
-                return;
-            }
+            this._throwIfInitializationAborted();
             this.app.addEventListener(dataEventEnum.CHANGE, this._updateBoundAppDataParts);
             this.app.addEventListener(dataEventEnum.QUERY_CHANGE, this._updateBoundQueryParamParts);
             if (this.dataField) {
                 this.app.registerDataListener(this);
             }
             await this.render();
-            if (this._completeIfAborted()) {
-                return;
-            }
+            this._throwIfInitializationAborted();
             await this._waitForSubelements();
-            if (this._completeIfAborted()) {
-                return;
-            }
+            this._throwIfInitializationAborted();
             await this._runLifecycle(Lifecycle.BEFORE_INIT_RESOLVE);
+            this.abortSignal.throwIfAborted();
             this._completeInitialization();
             await this._runLifecycle(Lifecycle.AFTER_INIT);
         }
         catch (error) {
             this._abort = true;
+            if (this.abortSignal.aborted || isElementCancellation(error)) {
+                const cancellation = this.abortSignal.aborted
+                    ? this.abortSignal.reason
+                    : error;
+                this._failInitialization(cancellation);
+                throw cancellation;
+            }
             if (this._initializationState ===
                 "pending") {
                 const initializationError = error instanceof
@@ -236,12 +248,14 @@ export class CustomElement extends HTMLElement {
         this._resolveInitialization = null;
         this._rejectInitialization = null;
     }
-    _completeIfAborted() {
+    _throwIfInitializationAborted() {
         if (!this._abort && this.isConnected) {
-            return false;
+            return;
         }
-        this._completeInitialization();
-        return true;
+        if (!this.abortSignal.aborted) {
+            this._abortController.abort(new ElementDisconnectedError());
+        }
+        this.abortSignal.throwIfAborted();
     }
     async _loadDependencies() {
         const constructorChain = [];
@@ -274,17 +288,33 @@ export class CustomElement extends HTMLElement {
         await Promise.all(Array.from(dependencies, dependency => dependency.load()));
     }
     async _handleError(error) {
+        if (this.abortSignal.aborted || isElementCancellation(error))
+            return;
         await this.app.handleErrorOnce(error);
     }
     async _runLifecycle(stage) {
+        const disconnecting = stage === Lifecycle.AFTER_DISCONNECT;
+        if (!disconnecting)
+            this.abortSignal.throwIfAborted();
         for (const { name, method } of getLifecycleMethods(this, stage)) {
             try {
-                await method.call(this);
+                if (disconnecting) {
+                    await method.call(this);
+                }
+                else {
+                    this.abortSignal.throwIfAborted();
+                    await awaitWithSignal(Promise.resolve(method.call(this)), this.abortSignal);
+                    this.abortSignal.throwIfAborted();
+                }
             }
             catch (error) {
+                if (isElementCancellation(error))
+                    throw error;
                 throw new MethodExecutionError(name, this.tagName, { cause: error });
             }
         }
+        if (!disconnecting)
+            this.abortSignal.throwIfAborted();
     }
     async _markup() {
         try {
@@ -294,6 +324,8 @@ export class CustomElement extends HTMLElement {
             return await this.markup.call(this);
         }
         catch (error) {
+            if (isElementCancellation(error))
+                throw error;
             if (error instanceof
                 MissingMarkupMethod) {
                 throw error;
@@ -306,9 +338,10 @@ export class CustomElement extends HTMLElement {
     }
     render = async () => {
         try {
-            const renderTemplate = async () => {
+            this.abortSignal.throwIfAborted();
+            const renderTemplate = async (signal = this.abortSignal) => {
                 if (this.useServer) {
-                    return await this._fetchHTML();
+                    return await this._fetchHTML(signal);
                 }
                 if (!this.markup) {
                     const markup = this.innerHTML.trim();
@@ -326,12 +359,13 @@ export class CustomElement extends HTMLElement {
                 const cacheDuration = this.cacheDuration ??
                     this.app.templatesCacheDuration;
                 renderedHtml = cacheDuration > 0
-                    ? await this.app.getOrSetCachedTemplate(cacheKey, cacheDuration, renderTemplate)
-                    : await renderTemplate();
+                    ? await awaitWithSignal(this.app.getOrSetCachedTemplate(cacheKey, cacheDuration, () => renderTemplate(null)), this.abortSignal)
+                    : await awaitWithSignal(renderTemplate(), this.abortSignal);
             }
             else {
-                renderedHtml = await renderTemplate();
+                renderedHtml = await awaitWithSignal(renderTemplate(), this.abortSignal);
             }
+            this.abortSignal.throwIfAborted();
             this.innerHTML = renderedHtml;
         }
         catch (error) {
@@ -339,16 +373,17 @@ export class CustomElement extends HTMLElement {
             throw error;
         }
     };
-    _fetchHTML = async () => {
+    _fetchHTML = async (signal = this.abortSignal) => {
         return await this.fetchHTML({
             tagName: this.tagName.toLowerCase(),
             groupName: this.groupName == null ? "default" : this.groupName,
             queryParameters: this.app.queryParameters || {},
             routeParameters: this.app?.router.routeParameters || {},
             attributes: this.args,
-        });
+        }, signal);
     };
-    fetchHTML = async (request) => {
+    fetchHTML = async (request, signal = this.abortSignal) => {
+        signal?.throwIfAborted();
         if (!this.app.serverComponentsUrl) {
             throw new Error("If using server components you need to provide the " +
                 "'serverComponentsUrl' property at application initialization.");
@@ -357,6 +392,7 @@ export class CustomElement extends HTMLElement {
         try {
             response = await fetch(this.app.serverComponentsUrl, {
                 method: "POST",
+                signal,
                 credentials: "include",
                 headers: {
                     "Content-Type": "application/json",
@@ -365,19 +401,23 @@ export class CustomElement extends HTMLElement {
             });
         }
         catch {
+            signal?.throwIfAborted();
             throw new NetworkError("Failed to fetch requested content. Server unresponsive.");
         }
+        signal?.throwIfAborted();
         if (!response.ok) {
             return this._checkFetchHTMLError(response);
         }
         try {
             const text = await response.text();
+            signal?.throwIfAborted();
             if (text.trim().length === 0) {
                 throw new MarkupFetchError("Fetched HTML markup was empty for a 2xx response.", this.tagName);
             }
             return text;
         }
         catch (error) {
+            signal?.throwIfAborted();
             if (error instanceof MarkupFetchError) {
                 throw error;
             }
@@ -404,6 +444,7 @@ export class CustomElement extends HTMLElement {
     };
     rerender = async () => {
         try {
+            this.abortSignal.throwIfAborted();
             this._templateSettings.dataBinds.clear();
             await this._runLifecycle(Lifecycle.BEFORE_RERENDER);
             await this.render();
@@ -415,13 +456,16 @@ export class CustomElement extends HTMLElement {
         }
         catch (error) {
             this._abort = true;
+            if (this.abortSignal.aborted)
+                throw this.abortSignal.reason;
             await this._handleError(error);
             throw error;
         }
     };
     async _waitForSubelements() {
+        this.abortSignal.throwIfAborted();
         const customElements = Array.from(this.querySelectorAll("*")).filter((element) => element instanceof CustomElement);
-        await Promise.all(customElements.map(element => element.initComplete));
+        await awaitWithSignal(Promise.all(customElements.map(element => element.initComplete)), this.abortSignal);
     }
     generateHash(length = 16) {
         return this.app.generateHash(length);
@@ -441,12 +485,16 @@ export class CustomElement extends HTMLElement {
         this._refreshBoundElements(bindingName);
     }
     _refreshBoundElements(propertyName) {
-        this._renderTime = Date.now();
+        if (this.abortSignal.aborted)
+            return;
         const templates = this._templateSettings.dataBinds.get(propertyName);
         if (!templates) {
             return;
         }
+        this._renderTime = Date.now();
         this.querySelectorAll(`[data-bind="${propertyName}"]`).forEach(element => {
+            if (this.abortSignal.aborted)
+                return;
             const elementId = element.getAttribute("data-bind-id");
             if (!elementId) {
                 return;
@@ -456,6 +504,8 @@ export class CustomElement extends HTMLElement {
                 return;
             }
             element.setAttribute("data-render-time", this._renderTime.toString());
+            if (this.abortSignal.aborted)
+                return;
             element.innerHTML =
                 elementTemplate;
         });
@@ -495,6 +545,7 @@ export class CustomElement extends HTMLElement {
     }
     async _executeElementMethod(element, methodName, event) {
         try {
+            this.abortSignal.throwIfAborted();
             const args = this._getAllArgs(element);
             const dynamicElement = this;
             const method = dynamicElement[methodName];
@@ -505,10 +556,10 @@ export class CustomElement extends HTMLElement {
             }
             const boundMethod = method;
             if (Object.keys(args).length > 0) {
-                await boundMethod.call(this, event, args);
+                await awaitWithSignal(Promise.resolve(boundMethod.call(this, event, args)), this.abortSignal);
             }
             else {
-                await boundMethod.call(this, event);
+                await awaitWithSignal(Promise.resolve(boundMethod.call(this, event)), this.abortSignal);
             }
         }
         catch (error) {

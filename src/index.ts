@@ -54,6 +54,11 @@ export {
     auth
 } from "./auth.js";
 
+export {
+    ElementDisconnectedError,
+    isElementCancellation,
+} from "./cancellation.js";
+
 export type {
     Authentication,
     RouteAuthenticationRequirement,
