@@ -390,7 +390,8 @@ export class CustomElement extends HTMLElement {
         }
         let response;
         try {
-            response = await fetch(this.app.serverComponentsUrl, {
+            const url = `${this.app.serverComponentsUrl}?${this.app.createQueryParametersString(this.app.queryParameters)}`;
+            response = await fetch(url, {
                 method: "POST",
                 signal,
                 credentials: "include",
