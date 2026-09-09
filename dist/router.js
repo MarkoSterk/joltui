@@ -3,6 +3,7 @@ import { CustomElement, } from "./customElement.js";
 import { requireElementMetadata, } from "./elementMetadata.js";
 import { NotImplementedError } from "./utilities.js";
 import { AuthenticationError, AuthorizationError } from "./auth.js";
+import { getGeneratedPages } from "./generatedPages.js";
 export const routeEventsEnum = {
     START: "route-change.start",
     FINISHED: "route-change.finished",
@@ -64,11 +65,17 @@ class Router {
         if (!isCustomElementClass(baseLayout)) {
             throw new TypeError("Invalid base layout element class");
         }
-        if (!Array.isArray(pages)) {
+        const resolvedPages = pages ?? getGeneratedPages();
+        if (!resolvedPages) {
+            throw new Error("Router pages were not provided and no generated page " +
+                "registry was found. Configure pages manually or install " +
+                "the JoltUI Vite plugin.");
+        }
+        if (!Array.isArray(resolvedPages)) {
             throw new TypeError("Router pages must be an array.");
         }
-        if (pages.length === 0) {
-            throw new Error("Router must contain at least one page.");
+        if (resolvedPages.length === 0) {
+            throw new Error("No JoltUI pages were provided or discovered.");
         }
         const layoutMetadata = requireElementMetadata(baseLayout);
         if (layoutMetadata.kind !== "layout") {
@@ -81,7 +88,7 @@ class Router {
         this._app = app;
         this._baseLayout = baseLayout;
         this.pages = Object.freeze([
-            ...pages,
+            ...resolvedPages,
         ]);
         this._defaultTarget = defaultTarget;
         this._baseUrl = this._normalizeBaseUrl(baseUrl);

@@ -6,6 +6,7 @@ import minifyHTMLLiterals from
 import {
     vitePluginTypescriptTransform,
 } from "vite-plugin-typescript-transform";
+import joltui from "../../joltui-vite-plugin/dist/index.js";
 
 export default defineConfig({
     root: fileURLToPath(
@@ -13,6 +14,7 @@ export default defineConfig({
     ),
 
     plugins: [
+        joltui(),
         {
             ...minifyHTMLLiterals({
                 include: ["**/*.ts"],

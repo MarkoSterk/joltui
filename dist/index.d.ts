@@ -7,6 +7,7 @@ export type { ElementKind, ElementMetadata, ComponentConfigs, ComponentMetadata,
 export { default as Router, routeEventsEnum, } from "./router.js";
 export { auth } from "./auth.js";
 export { ElementDisconnectedError, isElementCancellation, } from "./cancellation.js";
+export { getGeneratedPages, registerGeneratedPages, } from "./generatedPages.js";
 export type { Authentication, RouteAuthenticationRequirement, Route, RouteExtras, RouteParameters, ParsedRoute, MatchedRoute, RouterConfig, RedirectOptions, HandlerArgs, } from "./router.js";
 export { lifecycle, Lifecycle } from "./lifecycle.js";
 export { react, reactFactory, queryParam, select, selectAll } from "./properties.js";

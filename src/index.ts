@@ -59,6 +59,11 @@ export {
     isElementCancellation,
 } from "./cancellation.js";
 
+export {
+    getGeneratedPages,
+    registerGeneratedPages,
+} from "./generatedPages.js";
+
 export type {
     Authentication,
     RouteAuthenticationRequirement,

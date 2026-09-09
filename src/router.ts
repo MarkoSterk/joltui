@@ -12,6 +12,7 @@ import {
 } from "./elementMetadata.js";
 import { NotImplementedError } from "./utilities.js";
 import { AuthenticationError, AuthorizationError } from "./auth.js";
+import { getGeneratedPages } from "./generatedPages.js";
 
 export const routeEventsEnum = {
     START: "route-change.start",
@@ -150,7 +151,7 @@ export type RouterConfig<
     defaultTarget: string;
     indexRoute?: string;
     app: TApp;
-    pages: readonly CustomElementClass<TApp>[];
+    pages?: readonly CustomElementClass<TApp>[] | null;
 };
 
 export type RedirectOptions = {
@@ -237,15 +238,23 @@ class Router<TApp extends App> {
             );
         }
 
-        if (!Array.isArray(pages)) {
-            throw new TypeError(
-                "Router pages must be an array.",
+        const resolvedPages = pages ?? getGeneratedPages<TApp>();
+
+        if (!resolvedPages) {
+            throw new Error(
+                "Router pages were not provided and no generated page " +
+                "registry was found. Configure pages manually or install " +
+                "the JoltUI Vite plugin.",
             );
         }
 
-        if (pages.length === 0) {
+        if (!Array.isArray(resolvedPages)) {
+            throw new TypeError("Router pages must be an array.");
+        }
+
+        if (resolvedPages.length === 0) {
             throw new Error(
-                "Router must contain at least one page.",
+                "No JoltUI pages were provided or discovered.",
             );
         }
 
@@ -270,7 +279,7 @@ class Router<TApp extends App> {
         this._app = app;
         this._baseLayout = baseLayout;
         this.pages = Object.freeze([
-            ...pages,
+            ...resolvedPages,
         ]);
         this._defaultTarget = defaultTarget;
         this._baseUrl = this._normalizeBaseUrl(baseUrl);

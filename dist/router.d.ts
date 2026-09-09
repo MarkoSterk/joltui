@@ -71,7 +71,7 @@ export type RouterConfig<TApp extends App> = {
     defaultTarget: string;
     indexRoute?: string;
     app: TApp;
-    pages: readonly CustomElementClass<TApp>[];
+    pages?: readonly CustomElementClass<TApp>[] | null;
 };
 export type RedirectOptions = {
     useBaseUrl?: boolean;

@@ -7,7 +7,6 @@ import {
 } from "joltui";
 import BlogErrorHandler from "./errorHandler.js";
 import AppLayout from "./layouts/appLayout.js";
-import Pages from "./pages.js";
 import BlogRouter from "./router.js";
 
 export default class FieldnotesApp extends App<FieldnotesApp> {
@@ -23,7 +22,6 @@ export default class FieldnotesApp extends App<FieldnotesApp> {
     protected override routerGenerator(): BlogRouter {
         return new BlogRouter({
             app: this,
-            pages: Pages,
             baseLayout: AppLayout,
             defaultTarget: "#page-content",
         });
