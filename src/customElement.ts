@@ -763,7 +763,8 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
         let response: Response;
         try {
-            response = await fetch(this.app.serverComponentsUrl, {
+            const url = `${this.app.serverComponentsUrl}?${this.app.createQueryParametersString(this.app.queryParameters)}`;
+            response = await fetch(url, {
                 method: "POST",
                 signal,
                 credentials: "include",
