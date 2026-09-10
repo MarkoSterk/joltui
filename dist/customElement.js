@@ -363,26 +363,48 @@ export class CustomElement extends HTMLElement {
             element.removeAttributeNode(attribute);
         }
     }
-    _getPrerenderedOwnedElements() {
+    _isCustomElementBoundary(element) {
+        return element.namespaceURI === "http://www.w3.org/1999/xhtml" &&
+            element.localName.includes("-");
+    }
+    _getOwnedElements(roots) {
         const owned = [];
-        const visit = (parent) => {
-            for (const child of Array.from(parent.children)) {
-                owned.push(child);
-                if (child.namespaceURI === "http://www.w3.org/1999/xhtml" &&
-                    child.localName.includes("-")) {
-                    if (!customElements.get(child.localName)) {
-                        throw new Error(`Cannot initialize <${this.localName}>: ` +
-                            `child <${child.localName}> is not registered. ` +
-                            `Register it before initialization or declare it ` +
-                            `in the host component's dependencies.`);
-                    }
-                    // The child owns its contents, including lazy descendants.
-                    continue;
-                }
+        const visited = new Set();
+        const visit = (element) => {
+            if (visited.has(element))
+                return;
+            visited.add(element);
+            owned.push(element);
+            // Include child hosts, but never their contents, even before upgrade.
+            if (this._isCustomElementBoundary(element))
+                return;
+            for (const child of Array.from(element.children)) {
                 visit(child);
             }
         };
-        visit(this);
+        for (const root of roots) {
+            // Explicit insertion roots may themselves be inside another component.
+            let parent = root.parentElement;
+            while (parent && parent !== this) {
+                if (this._isCustomElementBoundary(parent))
+                    break;
+                parent = parent.parentElement;
+            }
+            if (parent === this)
+                visit(root);
+        }
+        return owned;
+    }
+    _getPrerenderedOwnedElements() {
+        const owned = this._getOwnedElements(Array.from(this.children));
+        for (const child of owned) {
+            if (this._isCustomElementBoundary(child) && !customElements.get(child.localName)) {
+                throw new Error(`Cannot initialize <${this.localName}>: ` +
+                    `child <${child.localName}> is not registered. ` +
+                    `Register it before initialization or declare it ` +
+                    `in the host component's dependencies.`);
+            }
+        }
         return owned;
     }
     _initializePrerenderedMarkup() {
@@ -585,12 +607,9 @@ export class CustomElement extends HTMLElement {
     }
     _hydrate = (roots = null) => {
         const elements = roots
-            ? roots.flatMap(root => [
-                root,
-                ...Array.from(root.querySelectorAll("*")),
-            ])
-            : Array.from(this.querySelectorAll(`[data-parent-id="${this.hashId}"]` +
-                `[data-render-time="${this.lastRender}"]`));
+            ? this._getOwnedElements(roots)
+            : this._getOwnedElements(Array.from(this.children)).filter(element => element.getAttribute("data-parent-id") === this.hashId &&
+                element.getAttribute("data-render-time") === String(this.lastRender));
         this._hydrateElements(elements);
     };
     _hydrateElements(elements) {
@@ -707,15 +726,9 @@ export class CustomElement extends HTMLElement {
     }
     _tagInsertedElements = (roots) => {
         this._lastRender = Date.now();
-        for (const root of roots) {
-            const elements = [
-                root,
-                ...Array.from(root.querySelectorAll("*")),
-            ];
-            for (const child of elements) {
-                child.setAttribute("data-parent-id", this.hashId);
-                child.setAttribute("data-render-time", this.lastRender.toString());
-            }
+        for (const child of this._getOwnedElements(roots)) {
+            child.setAttribute("data-parent-id", this.hashId);
+            child.setAttribute("data-render-time", this.lastRender.toString());
         }
     };
     _replaceAtWithJolt(template) {

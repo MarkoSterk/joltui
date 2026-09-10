@@ -713,30 +713,49 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
     }
 
-    protected _getPrerenderedOwnedElements(): Element[] {
+    protected _isCustomElementBoundary(element: Element): boolean {
+        return element.namespaceURI === "http://www.w3.org/1999/xhtml" &&
+            element.localName.includes("-");
+    }
+
+    protected _getOwnedElements(roots: readonly Element[]): Element[] {
         const owned: Element[] = [];
-        const visit = (parent: Element): void => {
-            for (const child of Array.from(parent.children)) {
-                owned.push(child);
-                if (
-                    child.namespaceURI === "http://www.w3.org/1999/xhtml" &&
-                    child.localName.includes("-")
-                ) {
-                    if (!customElements.get(child.localName)) {
-                        throw new Error(
-                            `Cannot initialize <${this.localName}>: ` +
-                            `child <${child.localName}> is not registered. ` +
-                            `Register it before initialization or declare it ` +
-                            `in the host component's dependencies.`,
-                        );
-                    }
-                    // The child owns its contents, including lazy descendants.
-                    continue;
-                }
+        const visited = new Set<Element>();
+        const visit = (element: Element): void => {
+            if (visited.has(element)) return;
+            visited.add(element);
+            owned.push(element);
+            // Include child hosts, but never their contents, even before upgrade.
+            if (this._isCustomElementBoundary(element)) return;
+            for (const child of Array.from(element.children)) {
                 visit(child);
             }
         };
-        visit(this);
+
+        for (const root of roots) {
+            // Explicit insertion roots may themselves be inside another component.
+            let parent = root.parentElement;
+            while (parent && parent !== this) {
+                if (this._isCustomElementBoundary(parent)) break;
+                parent = parent.parentElement;
+            }
+            if (parent === this) visit(root);
+        }
+        return owned;
+    }
+
+    protected _getPrerenderedOwnedElements(): Element[] {
+        const owned = this._getOwnedElements(Array.from(this.children));
+        for (const child of owned) {
+            if (this._isCustomElementBoundary(child) && !customElements.get(child.localName)) {
+                throw new Error(
+                    `Cannot initialize <${this.localName}>: ` +
+                    `child <${child.localName}> is not registered. ` +
+                    `Register it before initialization or declare it ` +
+                    `in the host component's dependencies.`,
+                );
+            }
+        }
         return owned;
     }
 
@@ -1050,17 +1069,11 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         roots: readonly Element[] | null = null,
     ): void => {
         const elements = roots
-            ? roots.flatMap(root => [
-                  root,
-                  ...Array.from(
-                      root.querySelectorAll("*"),
-                  ),
-              ])
-            : Array.from(
-                  this.querySelectorAll(
-                      `[data-parent-id="${this.hashId}"]` +
-                      `[data-render-time="${this.lastRender}"]`,
-                  ),
+            ? this._getOwnedElements(roots)
+            : this._getOwnedElements(Array.from(this.children)).filter(
+                  element =>
+                      element.getAttribute("data-parent-id") === this.hashId &&
+                      element.getAttribute("data-render-time") === String(this.lastRender),
               );
 
         this._hydrateElements(elements);
@@ -1350,25 +1363,16 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     ): void => {
         this._lastRender = Date.now();
 
-        for (const root of roots) {
-            const elements = [
-                root,
-                ...Array.from(
-                    root.querySelectorAll("*"),
-                ),
-            ];
+        for (const child of this._getOwnedElements(roots)) {
+            child.setAttribute(
+                "data-parent-id",
+                this.hashId,
+            );
 
-            for (const child of elements) {
-                child.setAttribute(
-                    "data-parent-id",
-                    this.hashId,
-                );
-
-                child.setAttribute(
-                    "data-render-time",
-                    this.lastRender.toString(),
-                );
-            }
+            child.setAttribute(
+                "data-render-time",
+                this.lastRender.toString(),
+            );
         }
     };
 

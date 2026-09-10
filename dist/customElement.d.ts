@@ -105,6 +105,8 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _markup(): Promise<string>;
     templateCacheKey(): string;
     protected _normalizePrerenderedAttributes(element: Element): void;
+    protected _isCustomElementBoundary(element: Element): boolean;
+    protected _getOwnedElements(roots: readonly Element[]): Element[];
     protected _getPrerenderedOwnedElements(): Element[];
     protected _initializePrerenderedMarkup(): void;
     render: () => Promise<void>;

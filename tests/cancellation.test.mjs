@@ -84,6 +84,74 @@ function append(parent, child) {
     return child;
 }
 
+for (const childFirst of [false, true]) {
+    test(`inserted markup hydrates the correct owner (child initialized first: ${childFirst})`, () => {
+        const parent = new TestElement();
+        parent.hashId = "page-id";
+        const wrapper = append(parent, new HTMLElement());
+        wrapper.localName = "div";
+        const child = append(wrapper, new TestElement());
+        child.localName = "edit-title";
+        child.hashId = "title-id";
+        child.setAttribute("jolt-change", "titleChanged");
+        const button = append(child, new HTMLElement());
+        button.localName = "button";
+        button.setAttribute("jolt-click", "editTitle");
+        const parentButton = append(wrapper, new HTMLElement());
+        parentButton.localName = "button";
+        parentButton.setAttribute("jolt-click", "pageAction");
+        const calls = [];
+        parent._executeElementMethod = (_element, method) => calls.push(`parent:${method}`);
+        child._executeElementMethod = (_element, method) => calls.push(`child:${method}`);
+
+        if (childFirst) child._initializePrerenderedMarkup();
+        // These are the shared hooks invoked after server/markup/HTML insertion.
+        parent.tagInsertedElements([wrapper]);
+        parent.hydrate([wrapper]);
+        if (!childFirst) {
+            assert.equal(button.hasAttribute("data-parent-id"), false);
+            assert.equal(button["jolt-click:active"], undefined);
+            child._initializePrerenderedMarkup();
+        }
+        assert.equal(button.getAttribute("data-parent-id"), "title-id");
+        assert.equal(button.getAttribute("data-render-time"), String(child.lastRender));
+        assert.equal(child.getAttribute("data-parent-id"), "page-id");
+
+        // Repeated and overlapping roots must not duplicate or steal listeners.
+        parent.hydrate([wrapper, child, button]);
+        parent.hydrate();
+        button.dispatchEvent(new Event("click"));
+        child.dispatchEvent(new Event("change"));
+        parentButton.dispatchEvent(new Event("click"));
+        assert.deepEqual(calls, ["child:editTitle", "parent:titleChanged", "parent:pageAction"]);
+    });
+}
+
+test("insertion respects unregistered boundaries and rejects foreign ownership roots", () => {
+    const parent = new TestElement();
+    parent.hashId = "parent-id";
+    const lazy = append(parent, new HTMLElement());
+    lazy.localName = "lazy-child";
+    const button = append(lazy, new HTMLElement());
+    button.localName = "button";
+    button.setAttribute("jolt-click", "childMethod");
+    const detached = new HTMLElement();
+    detached.localName = "button";
+    detached.setAttribute("jolt-click", "detachedMethod");
+    parent.tagInsertedElements([lazy, button, detached]);
+    parent.hydrate([lazy, button, detached]);
+    assert.equal(lazy.getAttribute("data-parent-id"), "parent-id");
+    for (const element of [button, detached]) {
+        assert.equal(element.hasAttribute("data-parent-id"), false);
+        assert.equal(element["jolt-click:active"], undefined);
+    }
+    // Even stale matching metadata cannot bypass a component boundary.
+    button.setAttribute("data-parent-id", parent.hashId);
+    button.setAttribute("data-render-time", String(parent.lastRender));
+    parent.hydrate();
+    assert.equal(button["jolt-click:active"], undefined);
+});
+
 test("prerendered adoption preserves nodes, literal templates and component boundaries", t => {
     t.mock.method(customElements, "get", name => name === "child-element" ? TestElement : undefined);
     const host = new TestElement();
