@@ -7,7 +7,14 @@ globalThis.HTMLElement = class extends EventTarget {
     isConnected = true;
     parentElement = null;
     innerHTML = "";
+    localName = "test-element";
+    namespaceURI = "http://www.w3.org/1999/xhtml";
+    children = [];
     attributesMap = new Map();
+    get attributes() {
+        return Array.from(this.attributesMap, ([name, value]) => ({ name, value }));
+    }
+    removeAttributeNode(attribute) { this.attributesMap.delete(attribute.name); }
     getAttribute(name) { return this.attributesMap.get(name) ?? null; }
     hasAttribute(name) { return this.attributesMap.has(name); }
     setAttribute(name, value) { this.attributesMap.set(name, value); }
@@ -16,6 +23,8 @@ globalThis.HTMLElement = class extends EventTarget {
 };
 globalThis.Element = globalThis.HTMLElement;
 globalThis.Document = class {};
+globalThis.location = { search: "" };
+globalThis.customElements = { get() { return undefined; } };
 for (const name of ["innerHTML", "outerHTML"]) {
     Object.defineProperty(Element.prototype, name, {
         configurable: true,
@@ -67,6 +76,146 @@ class TestElement extends CustomElement {
 function disconnect(element) {
     element.isConnected = false;
     element.disconnectedCallback();
+}
+
+function append(parent, child) {
+    parent.children.push(child);
+    child.parentElement = parent;
+    return child;
+}
+
+test("prerendered adoption preserves nodes, literal templates and component boundaries", t => {
+    t.mock.method(customElements, "get", name => name === "child-element" ? TestElement : undefined);
+    const host = new TestElement();
+    host.hashId = "host-id";
+    host.innerHTML = "{{= this.title }}";
+    const wrapper = append(host, new HTMLElement());
+    wrapper.localName = "div";
+    wrapper.setAttribute("@click", "clicked");
+    wrapper.setAttribute(":value", "literal {{= this.value }}");
+    // Mimic the framework's patched removal: it must never be used here.
+    wrapper.removeAttribute = () => assert.fail("Use raw attribute-node removal");
+    const child = append(wrapper, new TestElement());
+    child.localName = "child-element";
+    child.setAttribute("data-hash-id", "child-id");
+    child.setAttribute("@change", "changed");
+    const grandchild = append(child, new HTMLElement());
+    grandchild.localName = "unregistered-grandchild";
+    grandchild.setAttribute("@click", "childMethod");
+    grandchild.setAttribute("data-parent-id", "child-id");
+    let clicks = 0;
+    let changes = 0;
+    host._executeElementMethod = (_element, method) => {
+        if (method === "clicked") clicks++;
+        if (method === "changed") changes++;
+    };
+
+    host._initializePrerenderedMarkup();
+    host._initializePrerenderedMarkup();
+    assert.equal(host.children[0], wrapper);
+    assert.equal(wrapper.children[0], child);
+    assert.equal(host.innerHTML, "{{= this.title }}");
+    assert.equal(child.abortSignal.aborted, false);
+    assert.equal(child.getAttribute("data-hash-id"), "child-id");
+    for (const node of [wrapper, child]) {
+        assert.equal(node.getAttribute("data-parent-id"), "host-id");
+        assert.equal(node.getAttribute("data-render-time"), String(host.lastRender));
+    }
+    assert.equal(wrapper.hasAttribute(":value"), false);
+    assert.equal(wrapper.getAttribute("data-jolt-value"), "literal {{= this.value }}");
+    assert.equal(wrapper.hasAttribute("@click"), false);
+    assert.equal(grandchild.getAttribute("@click"), "childMethod");
+    assert.equal(grandchild.getAttribute("data-parent-id"), "child-id");
+    wrapper.dispatchEvent(new Event("click"));
+    child.dispatchEvent(new Event("change"));
+    grandchild.dispatchEvent(new Event("click"));
+    assert.equal(clicks, 1, "adoption must not duplicate listeners");
+    assert.equal(changes, 1, "parent handles events declared on child hosts");
+});
+
+test("prerendered adoption rejects undeclared children before tagging descendants", () => {
+    const host = new TestElement();
+    const child = append(host, new HTMLElement());
+    child.localName = "missing-child";
+    assert.throws(() => host._initializePrerenderedMarkup(), /missing-child.*not registered/);
+    assert.equal(child.hasAttribute("data-parent-id"), false);
+});
+
+test("prerendered normalization preserves canonical values and traverses foreign hyphenated tags", () => {
+    const host = new TestElement();
+    host.hashId = "host-id";
+    const foreign = append(host, new HTMLElement());
+    foreign.namespaceURI = "http://www.w3.org/2000/svg";
+    foreign.localName = "font-face";
+    foreign.setAttribute(":value", "shorthand");
+    foreign.setAttribute("data-jolt-value", "canonical");
+    host._initializePrerenderedMarkup();
+    assert.equal(foreign.getAttribute("data-jolt-value"), "canonical");
+    assert.equal(foreign.hasAttribute(":value"), false);
+    assert.equal(foreign.getAttribute("data-parent-id"), "host-id");
+});
+
+test("prerendered initialization normalizes host arguments before loading dependencies", async t => {
+    let registered = false;
+    t.mock.method(customElements, "get", () => registered ? TestElement : undefined);
+    const host = new TestElement();
+    host._app = makeApp();
+    host.server = false;
+    host.setAttribute(":value", "42");
+    const child = append(host, new TestElement());
+    child.localName = "lazy-child";
+    host._loadDependencies = async () => {
+        assert.equal(host.getAttribute("data-jolt-value"), "42");
+        assert.equal(host.hasAttribute(":value"), false);
+        await Promise.resolve();
+        registered = true;
+    };
+    host.render = () => assert.fail("Initial prerendered markup must bypass rendering");
+    await host.initElement();
+    assert.equal(host.initializationState, "fulfilled");
+    assert.equal(child.getAttribute("data-parent-id"), host.hashId);
+});
+
+for (const ownerType of ["component", "application"]) {
+    test(`${ownerType} waits for nearest components through HTML wrappers`, async () => {
+        const owner = ownerType === "component" ? new TestElement() : makeApp();
+        const root = ownerType === "component" ? owner : new HTMLElement();
+        if (ownerType === "application") owner._container = root;
+        const wrapper = new HTMLElement();
+        wrapper.parentElement = root;
+        const child = new TestElement();
+        child.parentElement = wrapper;
+        const nested = new TestElement();
+        nested.parentElement = child;
+        const sibling = new TestElement();
+        sibling.parentElement = root;
+        root.querySelectorAll = () => [wrapper, child, nested, sibling];
+
+        const wait = owner._waitForSubelements();
+        let completed = false;
+        void wait.then(() => { completed = true; }, () => {});
+        // A child's discarded descendants must not reject the owner's wait.
+        disconnect(nested);
+        child._completeInitialization();
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(completed, false, "must still await the sibling");
+        sibling._completeInitialization();
+        await wait;
+        assert.equal(completed, true);
+    });
+
+    test(`${ownerType} propagates a nearest child's initialization failure`, async () => {
+        const owner = ownerType === "component" ? new TestElement() : makeApp();
+        const root = ownerType === "component" ? owner : new HTMLElement();
+        if (ownerType === "application") owner._container = root;
+        const child = new TestElement();
+        child.parentElement = root;
+        root.querySelectorAll = () => [child];
+        const wait = owner._waitForSubelements();
+        const failure = new Error("Child initialization failed");
+        child._failInitialization(failure);
+        await assert.rejects(wait, error => error === failure);
+    });
 }
 
 test("disconnection promptly rejects initialization and aborts its private fetch", async t => {

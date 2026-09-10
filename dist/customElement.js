@@ -189,6 +189,8 @@ export class CustomElement extends HTMLElement {
             }
             this._templateSettings =
                 createTemplateSettings();
+            // Children can initialize before their parent adopts their host.
+            this._normalizePrerenderedAttributes(this);
             await awaitWithSignal(this._loadDependencies(), this.abortSignal);
             this._throwIfInitializationAborted();
             await this._runLifecycle(Lifecycle.BEFORE_INIT);
@@ -198,7 +200,12 @@ export class CustomElement extends HTMLElement {
             if (this.dataField) {
                 this.app.registerDataListener(this);
             }
-            await this.render();
+            if (!this.useServer && !this.markup) {
+                this._initializePrerenderedMarkup();
+            }
+            else {
+                await this.render();
+            }
             this._throwIfInitializationAborted();
             await this._waitForSubelements();
             this._throwIfInitializationAborted();
@@ -336,6 +343,62 @@ export class CustomElement extends HTMLElement {
     templateCacheKey() {
         return this.app.getTemplateCacheKey(this.tagName, this.args);
     }
+    _normalizePrerenderedAttributes(element) {
+        for (const attribute of Array.from(element.attributes)) {
+            const prefix = attribute.name[0];
+            if (prefix !== ":" && prefix !== "@")
+                continue;
+            const suffix = attribute.name.substring(1);
+            if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(suffix)) {
+                throw new Error(`Invalid shorthand attribute '${attribute.name}' ` +
+                    `on <${element.localName}>.`);
+            }
+            const normalizedName = prefix === ":"
+                ? `data-jolt-${suffix}`
+                : `jolt-${suffix}`;
+            if (!element.hasAttribute(normalizedName)) {
+                element.setAttribute(normalizedName, attribute.value);
+            }
+            // removeAttribute(":name") would remove the canonical attribute.
+            element.removeAttributeNode(attribute);
+        }
+    }
+    _getPrerenderedOwnedElements() {
+        const owned = [];
+        const visit = (parent) => {
+            for (const child of Array.from(parent.children)) {
+                owned.push(child);
+                if (child.namespaceURI === "http://www.w3.org/1999/xhtml" &&
+                    child.localName.includes("-")) {
+                    if (!customElements.get(child.localName)) {
+                        throw new Error(`Cannot initialize <${this.localName}>: ` +
+                            `child <${child.localName}> is not registered. ` +
+                            `Register it before initialization or declare it ` +
+                            `in the host component's dependencies.`);
+                    }
+                    // The child owns its contents, including lazy descendants.
+                    continue;
+                }
+                visit(child);
+            }
+        };
+        visit(this);
+        return owned;
+    }
+    _initializePrerenderedMarkup() {
+        this.abortSignal.throwIfAborted();
+        const elements = this._getPrerenderedOwnedElements();
+        this._lastRender = Date.now();
+        const renderTime = this.lastRender.toString();
+        for (const element of elements) {
+            this.abortSignal.throwIfAborted();
+            this._normalizePrerenderedAttributes(element);
+            element.setAttribute("data-parent-id", this.hashId);
+            element.setAttribute("data-render-time", renderTime);
+        }
+        this.abortSignal.throwIfAborted();
+        this._hydrateElements(elements);
+    }
     render = async () => {
         try {
             this.abortSignal.throwIfAborted();
@@ -465,7 +528,16 @@ export class CustomElement extends HTMLElement {
     };
     async _waitForSubelements() {
         this.abortSignal.throwIfAborted();
-        const customElements = Array.from(this.querySelectorAll("*")).filter((element) => element instanceof CustomElement);
+        const customElements = Array.from(this.querySelectorAll("*")).filter((element) => element instanceof CustomElement).filter(element => {
+            // HTML wrappers do not establish a component boundary.
+            let parent = element.parentElement;
+            while (parent && parent !== this) {
+                if (parent instanceof CustomElement)
+                    return false;
+                parent = parent.parentElement;
+            }
+            return parent === this;
+        });
         await awaitWithSignal(Promise.all(customElements.map(element => element.initComplete)), this.abortSignal);
     }
     generateHash(length = 16) {
@@ -519,9 +591,12 @@ export class CustomElement extends HTMLElement {
             ])
             : Array.from(this.querySelectorAll(`[data-parent-id="${this.hashId}"]` +
                 `[data-render-time="${this.lastRender}"]`));
+        this._hydrateElements(elements);
+    };
+    _hydrateElements(elements) {
         const elementsWithEvents = this._allElementsWithEvents(elements);
         this._setEventListeners(elementsWithEvents);
-    };
+    }
     _setEventListeners(elementsWithEvents) {
         for (const eventConfig of elementsWithEvents) {
             const { element, eventName, methodName, } = eventConfig;

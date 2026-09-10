@@ -588,7 +588,15 @@ class App<
                 ): element is CustomElement<TApp> =>
                     element instanceof
                     CustomElement,
-            );
+            ).filter(element => {
+                // Each top-level component waits for its own children.
+                let parent: Element | null = element.parentElement;
+                while (parent && parent !== this.container) {
+                    if (parent instanceof CustomElement) return false;
+                    parent = parent.parentElement;
+                }
+                return parent === this.container;
+            });
 
         await Promise.all(
             customElements.map(

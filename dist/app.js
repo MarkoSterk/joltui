@@ -240,7 +240,16 @@ class App {
     }
     async _waitForSubelements() {
         const customElements = Array.from(this.querySelectorAll("*")).filter((element) => element instanceof
-            CustomElement);
+            CustomElement).filter(element => {
+            // Each top-level component waits for its own children.
+            let parent = element.parentElement;
+            while (parent && parent !== this.container) {
+                if (parent instanceof CustomElement)
+                    return false;
+                parent = parent.parentElement;
+            }
+            return parent === this.container;
+        });
         await Promise.all(customElements.map(element => element.initComplete));
     }
     _initializeErrorHandlers() {

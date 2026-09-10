@@ -104,6 +104,9 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _runLifecycle(stage: Lifecycle): Promise<void>;
     protected _markup(): Promise<string>;
     templateCacheKey(): string;
+    protected _normalizePrerenderedAttributes(element: Element): void;
+    protected _getPrerenderedOwnedElements(): Element[];
+    protected _initializePrerenderedMarkup(): void;
     render: () => Promise<void>;
     _fetchHTML: (signal?: AbortSignal | null) => Promise<string>;
     fetchHTML: (request: FetchHtmlRequest, signal?: AbortSignal | null) => Promise<string>;
@@ -116,6 +119,7 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     invalidate(bindingName: string): void;
     _refreshBoundElements(propertyName: string): void;
     protected _hydrate: (roots?: readonly Element[] | null) => void;
+    protected _hydrateElements(elements: Iterable<Element>): void;
     protected _setEventListeners(elementsWithEvents: ElementEventConfig[]): void;
     protected _createEventListenerMethod(element: Element, methodName: string): EventListener;
     protected _executeElementMethod(element: Element, methodName: string, event: Event): Promise<void>;
