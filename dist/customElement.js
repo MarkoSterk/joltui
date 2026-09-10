@@ -139,7 +139,7 @@ export class CustomElement extends HTMLElement {
         }
     }
     disconnectedCallback() {
-        this._abortController.abort(new ElementDisconnectedError());
+        this._abortController.abort(new ElementDisconnectedError(this.tagName));
         if (!this._app) {
             return;
         }
@@ -253,7 +253,7 @@ export class CustomElement extends HTMLElement {
             return;
         }
         if (!this.abortSignal.aborted) {
-            this._abortController.abort(new ElementDisconnectedError());
+            this._abortController.abort(new ElementDisconnectedError(this.tagName));
         }
         this.abortSignal.throwIfAborted();
     }

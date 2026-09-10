@@ -1,6 +1,7 @@
 /** Normal end-of-lifetime cancellation, not an application failure. */
 export declare class ElementDisconnectedError extends Error {
-    constructor();
+    tagName: string;
+    constructor(tagName: string);
 }
 export declare function isElementCancellation(error: unknown): boolean;
 /** Cancel this consumer's wait without cancelling shared underlying work. */
