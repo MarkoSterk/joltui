@@ -342,7 +342,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     }
 
     disconnectedCallback(): void {
-        this._abortController.abort(new ElementDisconnectedError());
+        this._abortController.abort(new ElementDisconnectedError(this.tagName));
         if (!this._app) {
             return;
         }
@@ -552,7 +552,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
 
         if (!this.abortSignal.aborted) {
-            this._abortController.abort(new ElementDisconnectedError());
+            this._abortController.abort(new ElementDisconnectedError(this.tagName));
         }
         this.abortSignal.throwIfAborted();
     }

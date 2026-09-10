@@ -1,7 +1,9 @@
 /** Normal end-of-lifetime cancellation, not an application failure. */
 export class ElementDisconnectedError extends Error {
-    constructor() {
-        super("Element disconnected before its operation completed.");
+    tagName: string;
+    constructor(tagName: string) {
+        super(`Element <${tagName}> disconnected before its operation completed.`);
+        this.tagName = tagName;
         this.name = "ElementDisconnectedError";
     }
 }
