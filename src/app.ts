@@ -51,6 +51,28 @@ function getAttributeBindingName(
     return `attr.${attributeName}`;
 }
 
+function findManagingCustomElement<
+    TApp extends App<TApp>,
+>(
+    element: Element,
+): CustomElement<TApp> | null {
+    let current: Element | null = element;
+
+    while (current) {
+        if (current instanceof CustomElement) {
+            return current as CustomElement<TApp>;
+        }
+
+        if (current.localName.includes("-")) {
+            return null;
+        }
+
+        current = current.parentElement;
+    }
+
+    return null;
+}
+
 export const dataEventEnum = {
     CHANGE: "app-data-change",
     QUERY_CHANGE: "query-parameter-change",
@@ -835,10 +857,65 @@ class App<
 
         const appInstance = this;
 
+        const innerHTMLDescriptor =
+            Object.getOwnPropertyDescriptor(
+                Element.prototype,
+                "innerHTML",
+            );
+        const outerHTMLDescriptor =
+            Object.getOwnPropertyDescriptor(
+                Element.prototype,
+                "outerHTML",
+            );
+
+        if (
+            !innerHTMLDescriptor ||
+            typeof innerHTMLDescriptor.set !== "function"
+        ) {
+            throw new Error(
+                "Missing native Element.innerHTML setter.",
+            );
+        }
+
+        if (
+            !outerHTMLDescriptor ||
+            typeof outerHTMLDescriptor.set !== "function"
+        ) {
+            throw new Error(
+                "Missing native Element.outerHTML setter.",
+            );
+        }
+
+        const nativeInnerHTMLSetter =
+            appInstance._originalInnerHTML as (
+                this: Element,
+                value: unknown,
+            ) => void;
+        const nativeOuterHTMLSetter =
+            appInstance._originalOuterHTML as (
+                this: Element,
+                value: unknown,
+            ) => void;
+        const nativeInsertAdjacentHTML =
+            appInstance._originalInsertAdjacentHTML as (
+                this: Element,
+                position: InsertPosition,
+                value: unknown,
+            ) => void;
+
         Element.prototype.setAttribute = function(
             name: string,
             value: string,
         ): void {
+            if (typeof name !== "string") {
+                appInstance._originalSetAttribute.call(
+                    this,
+                    name,
+                    value,
+                );
+                return;
+            }
+
             const normalizedName =
                 normalizeJoltAttributeName(name);
             const previousValue =
@@ -853,11 +930,17 @@ class App<
                 value,
             );
 
+            const currentValue =
+                appInstance._originalGetAttribute.call(
+                    this,
+                    normalizedName,
+                );
+
             if (
                 this instanceof CustomElement &&
-                previousValue !== value
+                previousValue !== currentValue
             ) {
-                this._refreshBoundElements(
+                void this._refreshBoundElements(
                     getAttributeBindingName(
                         normalizedName,
                     ),
@@ -868,6 +951,14 @@ class App<
         Element.prototype.removeAttribute = function(
             name: string,
         ): void {
+            if (typeof name !== "string") {
+                appInstance._originalRemoveAttribute.call(
+                    this,
+                    name,
+                );
+                return;
+            }
+
             const normalizedName =
                 normalizeJoltAttributeName(name);
             const attributeExisted =
@@ -885,7 +976,7 @@ class App<
                 this instanceof CustomElement &&
                 attributeExisted
             ) {
-                this._refreshBoundElements(
+                void this._refreshBoundElements(
                     getAttributeBindingName(
                         normalizedName,
                     ),
@@ -896,6 +987,13 @@ class App<
         Element.prototype.getAttribute = function(
             name: string,
         ): string | null {
+            if (typeof name !== "string") {
+                return appInstance._originalGetAttribute.call(
+                    this,
+                    name,
+                );
+            }
+
             return appInstance._originalGetAttribute.call(
                 this,
                 normalizeJoltAttributeName(name),
@@ -905,6 +1003,13 @@ class App<
         Element.prototype.hasAttribute = function(
             name: string,
         ): boolean {
+            if (typeof name !== "string") {
+                return appInstance._originalHasAttribute.call(
+                    this,
+                    name,
+                );
+            }
+
             return appInstance._originalHasAttribute.call(
                 this,
                 normalizeJoltAttributeName(name),
@@ -915,6 +1020,14 @@ class App<
             name: string,
             force?: boolean,
         ): boolean {
+            if (typeof name !== "string") {
+                return appInstance._originalToggleAttribute.call(
+                    this,
+                    name,
+                    force,
+                );
+            }
+
             const normalizedName =
                 normalizeJoltAttributeName(name);
             const existedBefore =
@@ -933,7 +1046,7 @@ class App<
                 this instanceof CustomElement &&
                 existedBefore !== existsAfter
             ) {
-                this._refreshBoundElements(
+                void this._refreshBoundElements(
                     getAttributeBindingName(
                         normalizedName,
                     ),
@@ -960,95 +1073,165 @@ class App<
             return elements;
         };
 
-        Element.prototype.insertAdjacentHTML = function(position, html){
-            const customElement = this.closest("[data-hash-id]") as CustomElement<TApp> | null;
-            if(customElement){
-                const renderedTemplate = customElement.dotJSengine(html)
-                if(!renderedTemplate){
-                    return;
-                }
+        Element.prototype.insertAdjacentHTML = function(
+            position: InsertPosition,
+            html: string,
+        ): void {
+            const customElement =
+                findManagingCustomElement<TApp>(this);
 
-                const parent = this.parentNode;
-                const previousSibling = this.previousSibling;
-                const nextSibling = this.nextSibling;
-                const firstChild = this.firstChild;
-                const lastChild = this.lastChild;
-
-                appInstance._originalInsertAdjacentHTML.call(this, position, renderedTemplate)
-
-                let insertedElements: Element[];
-                switch (position) {
-                    case "beforebegin":
-                        insertedElements = parent
-                            ? elementsBetween(
-                                  previousSibling
-                                      ? previousSibling.nextSibling
-                                      : parent.firstChild,
-                                  this,
-                              )
-                            : [];
-                        break;
-                    case "afterbegin":
-                        insertedElements = elementsBetween(
-                            this.firstChild,
-                            firstChild,
-                        );
-                        break;
-                    case "beforeend":
-                        insertedElements = elementsBetween(
-                            lastChild
-                                ? lastChild.nextSibling
-                                : this.firstChild,
-                            null,
-                        );
-                        break;
-                    case "afterend":
-                        insertedElements = parent
-                            ? elementsBetween(
-                                  this.nextSibling,
-                                  nextSibling,
-                              )
-                            : [];
-                        break;
-                }
-
-                customElement.tagInsertedElements(
-                    insertedElements,
+            if (
+                !customElement ||
+                typeof html !== "string"
+            ) {
+                nativeInsertAdjacentHTML.call(
+                    this,
+                    position,
+                    html,
                 );
-                customElement.hydrate(insertedElements);
                 return;
             }
-            appInstance._originalInsertAdjacentHTML.call(this, position, html);
-        }
-        Object.defineProperty(Element.prototype, 'innerHTML',  {
-            configurable: true,
-            enumerable: true,
-            set: function(this: Element, html: string){
-                html = html.trim();
-                const customElement = this.closest("[data-hash-id]") as CustomElement<TApp> | null;
-                if(!customElement){
-                    appInstance._originalInnerHTML.call(this, html);
-                    return;
-                }
-                appInstance._originalInnerHTML.call(this, "");
-                this.insertAdjacentHTML("afterbegin", html);
+
+            const renderedTemplate =
+                customElement.dotJSengine(html);
+
+            if (!renderedTemplate) {
+                return;
             }
-        });
-        Object.defineProperty(Element.prototype, 'outerHTML', {
-            configurable: true,
-            enumerable: true,
-            set: function(this: Element, html: string){
-                html = html.trim();
-                const customElement = this.closest("[data-hash-id]") as CustomElement<TApp> | null;
-                if(customElement){
-                    const renderedTemplate = customElement.dotJSengine(html)
-                    if(!renderedTemplate){
+
+            const parent = this.parentNode;
+            const previousSibling = this.previousSibling;
+            const nextSibling = this.nextSibling;
+            const firstChild = this.firstChild;
+            const lastChild = this.lastChild;
+
+            nativeInsertAdjacentHTML.call(
+                this,
+                position,
+                renderedTemplate,
+            );
+
+            let insertedElements: Element[];
+            switch (position) {
+                case "beforebegin":
+                    insertedElements = parent
+                        ? elementsBetween(
+                              previousSibling
+                                  ? previousSibling.nextSibling
+                                  : parent.firstChild,
+                              this,
+                          )
+                        : [];
+                    break;
+                case "afterbegin":
+                    insertedElements = elementsBetween(
+                        this.firstChild,
+                        firstChild,
+                    );
+                    break;
+                case "beforeend":
+                    insertedElements = elementsBetween(
+                        lastChild
+                            ? lastChild.nextSibling
+                            : this.firstChild,
+                        null,
+                    );
+                    break;
+                case "afterend":
+                    insertedElements = parent
+                        ? elementsBetween(
+                              this.nextSibling,
+                              nextSibling,
+                          )
+                        : [];
+                    break;
+            }
+
+            customElement.tagInsertedElements(
+                insertedElements,
+            );
+            customElement.hydrate(insertedElements);
+        };
+
+        Object.defineProperty(
+            Element.prototype,
+            "innerHTML",
+            {
+                ...innerHTMLDescriptor,
+                set: function(
+                    this: Element,
+                    html: unknown,
+                ): void {
+                    const customElement =
+                        findManagingCustomElement<TApp>(
+                            this,
+                        );
+
+                    if (
+                        !customElement ||
+                        typeof html !== "string"
+                    ) {
+                        nativeInnerHTMLSetter.call(
+                            this,
+                            html,
+                        );
                         return;
                     }
+
+                    nativeInnerHTMLSetter.call(this, "");
+                    this.insertAdjacentHTML(
+                        "afterbegin",
+                        html.trim(),
+                    );
+                },
+            },
+        );
+
+        Object.defineProperty(
+            Element.prototype,
+            "outerHTML",
+            {
+                ...outerHTMLDescriptor,
+                set: function(
+                    this: Element,
+                    html: unknown,
+                ): void {
+                    const customElement =
+                        findManagingCustomElement<TApp>(
+                            this,
+                        );
+
+                    if (
+                        !customElement ||
+                        typeof html !== "string"
+                    ) {
+                        nativeOuterHTMLSetter.call(
+                            this,
+                            html,
+                        );
+                        return;
+                    }
+
+                    const renderedTemplate =
+                        customElement.dotJSengine(
+                            html.trim(),
+                        );
+
+                    if (!renderedTemplate) {
+                        return;
+                    }
+
                     const parent = this.parentNode;
-                    const previousSibling = this.previousSibling;
-                    const nextSibling = this.nextSibling;
-                    appInstance._originalOuterHTML.call(this, renderedTemplate);
+                    const previousSibling =
+                        this.previousSibling;
+                    const nextSibling =
+                        this.nextSibling;
+
+                    nativeOuterHTMLSetter.call(
+                        this,
+                        renderedTemplate,
+                    );
+
                     const insertedElements = parent
                         ? elementsBetween(
                               previousSibling
@@ -1057,32 +1240,61 @@ class App<
                               nextSibling,
                           )
                         : [];
+
                     customElement.tagInsertedElements(
                         insertedElements,
                     );
-                    customElement.hydrate(insertedElements);
-                    return;
-                }
-                appInstance._originalOuterHTML.call(this, html);
-            }
-        });
+                    customElement.hydrate(
+                        insertedElements,
+                    );
+                },
+            },
+        );
 
         Document.prototype.querySelector = function(selector: string) {
+            if (typeof selector !== "string") {
+                return appInstance._originalDocQS.call(
+                    this,
+                    selector,
+                );
+            }
+
             const newSelector = transformSelector(selector)
             return appInstance._originalDocQS.call(this, newSelector);
         };
 
         Document.prototype.querySelectorAll = function(selector: string) {
+            if (typeof selector !== "string") {
+                return appInstance._originalDocQSA.call(
+                    this,
+                    selector,
+                );
+            }
+
             const newSelector = transformSelector(selector)
             return appInstance._originalDocQSA.call(this, newSelector);
         };
 
         Element.prototype.querySelector = function(selector: string) {
+            if (typeof selector !== "string") {
+                return appInstance._originalElQS.call(
+                    this,
+                    selector,
+                );
+            }
+
             const newSelector = transformSelector(selector)
             return appInstance._originalElQS.call(this, newSelector);
         };
 
         Element.prototype.querySelectorAll = function(selector: string) {
+            if (typeof selector !== "string") {
+                return appInstance._originalElQSA.call(
+                    this,
+                    selector,
+                );
+            }
+
             const newSelector = transformSelector(selector)
             return appInstance._originalElQSA.call(this, newSelector);
         };
