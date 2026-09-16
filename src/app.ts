@@ -1,10 +1,13 @@
-import Router from "./router.js";
+import Router, {
+    type RouteParameters,
+} from "./router.js";
 import { isElementCancellation } from "./cancellation.js";
 import ErrorHandler, {
     type ErrorHandlerClass,
 } from "./errorHandler.js";
 import {
     CustomElement,
+    type FetchHtmlRequest,
 } from "./customElement.js";
 import { transformSelector } from "./selectorParser/index.js";
 import {
@@ -1466,6 +1469,10 @@ class App<
         return this._router;
     }
 
+    get currentRouteParameters(): RouteParameters {
+        return this._router?.routeParameters ?? {};
+    }
+
     get appName(): string {
         return this._appName;
     }
@@ -1647,6 +1654,19 @@ class App<
             routeParameters,
             queryParameters,
             args,
+        });
+    }
+
+    getServerComponentCacheKey(
+        request: FetchHtmlRequest,
+    ): string {
+        return stableSerialize({
+            type: "server-component",
+            tagName: request.tagName.trim().toLowerCase(),
+            groupName: request.groupName?.trim() || "default",
+            routeParameters: request.routeParameters ?? {},
+            queryParameters: request.queryParameters ?? {},
+            attributes: request.attributes ?? {},
         });
     }
 

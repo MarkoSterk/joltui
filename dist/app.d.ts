@@ -1,6 +1,6 @@
-import Router from "./router.js";
+import Router, { type RouteParameters } from "./router.js";
 import ErrorHandler, { type ErrorHandlerClass } from "./errorHandler.js";
-import { CustomElement } from "./customElement.js";
+import { CustomElement, type FetchHtmlRequest } from "./customElement.js";
 import { Lifecycle } from "./lifecycle.js";
 export declare const dataEventEnum: {
     readonly CHANGE: "app-data-change";
@@ -104,6 +104,7 @@ declare class App<TApp extends App<TApp> = any> {
     get childNodes(): NodeListOf<ChildNode>;
     get container(): AppContainer<TApp>;
     get router(): Router<TApp>;
+    get currentRouteParameters(): RouteParameters;
     get appName(): string;
     get serverComponentsUrl(): string | null;
     set serverComponentsUrl(value: string);
@@ -116,6 +117,7 @@ declare class App<TApp extends App<TApp> = any> {
     updateQueryParameters(params: Record<string, string | number | null>): void;
     createQueryParametersString(params: Record<string, string | number>, exclude?: string[]): string;
     getTemplateCacheKey(tagName: string, args?: Record<string, unknown>): string;
+    getServerComponentCacheKey(request: FetchHtmlRequest): string;
     setCachedTemplate(key: string, template: string, duration: number): void;
     getCachedTemplate(key: string): string | null;
     getOrSetCachedTemplate(key: string, duration: number, templateFactory: () => string | Promise<string>): Promise<string>;

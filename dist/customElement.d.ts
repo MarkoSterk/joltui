@@ -32,11 +32,25 @@ export declare class MarkupFetchError extends Error {
 }
 export type FetchHtmlRequest = {
     tagName: string;
-    groupName: string;
+    groupName?: string | null;
     routeParameters?: Record<string, string | number> | null;
-    queryParameters?: Record<string, string>;
-    attributes?: Record<string, any>;
+    queryParameters?: Record<string, string> | null;
+    attributes?: Record<string, unknown> | null;
 };
+export type ResolvedFetchHtmlRequest = {
+    tagName: string;
+    groupName: string;
+    routeParameters: Record<string, string | number>;
+    queryParameters: Record<string, string>;
+    attributes: Record<string, unknown>;
+};
+export type FetchHtmlOptions = {
+    signal?: AbortSignal | null;
+    cache?: boolean;
+    cacheDuration?: number | null;
+    cacheKey?: string | null;
+};
+export type PrefetchHtmlOptions = Omit<FetchHtmlOptions, "signal" | "cache">;
 type MaybePromise<T> = T | Promise<T>;
 export type ComponentMethod = (this: CustomElement, ...args: any[]) => MaybePromise<unknown>;
 export type MarkupMethod = (this: CustomElement) => MaybePromise<string>;
@@ -103,7 +117,7 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _handleError(error: unknown): Promise<void>;
     protected _runLifecycle(stage: Lifecycle): Promise<void>;
     protected _markup(): Promise<string>;
-    templateCacheKey(): string;
+    templateCacheKey(request?: FetchHtmlRequest): string;
     protected _normalizePrerenderedAttributes(element: Element): void;
     protected _isCustomElementBoundary(element: Element): boolean;
     protected _getOwnedElements(roots: readonly Element[]): Element[];
@@ -111,8 +125,12 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _initializePrerenderedMarkup(): void;
     render: () => Promise<void>;
     _fetchHTML: (signal?: AbortSignal | null) => Promise<string>;
-    fetchHTML: (request: FetchHtmlRequest, signal?: AbortSignal | null) => Promise<string>;
-    _checkFetchHTMLError: (response: Response) => never;
+    protected _createFetchHTMLRequest: () => FetchHtmlRequest;
+    protected _resolveFetchHTMLRequest: (request: FetchHtmlRequest) => ResolvedFetchHtmlRequest;
+    fetchHTML: (request: FetchHtmlRequest, optionsOrSignal?: FetchHtmlOptions | AbortSignal | null) => Promise<string>;
+    prefetchHTML: (request: FetchHtmlRequest, options?: PrefetchHtmlOptions) => Promise<string>;
+    protected _requestHTML: (request: ResolvedFetchHtmlRequest, signal: AbortSignal | null) => Promise<string>;
+    _checkFetchHTMLError: (response: Response, request: ResolvedFetchHtmlRequest) => never;
     rerender: () => Promise<void>;
     protected _waitForSubelements(): Promise<void>;
     generateHash(length?: number): string;

@@ -340,8 +340,10 @@ export class CustomElement extends HTMLElement {
             throw new RenderError(this.tagName);
         }
     }
-    templateCacheKey() {
-        return this.app.getTemplateCacheKey(this.tagName, this.args);
+    templateCacheKey(request) {
+        return request
+            ? this.app.getServerComponentCacheKey(request)
+            : this.app.getTemplateCacheKey(this.tagName, this.args);
     }
     _normalizePrerenderedAttributes(element) {
         for (const attribute of Array.from(element.attributes)) {
@@ -424,31 +426,33 @@ export class CustomElement extends HTMLElement {
     render = async () => {
         try {
             this.abortSignal.throwIfAborted();
-            const renderTemplate = async (signal = this.abortSignal) => {
-                if (this.useServer) {
-                    return await this._fetchHTML(signal);
-                }
-                if (!this.markup) {
-                    const markup = this.innerHTML.trim();
-                    return markup;
-                }
-                return await this._markup();
-            };
             let renderedHtml;
-            if (this.cache) {
-                const cacheKey = this.templateCacheKey();
-                if ((typeof cacheKey !== "string" ||
-                    cacheKey.trim().length === 0)) {
-                    throw new TypeError("templateCacheKey must return a non-empty string.");
-                }
-                const cacheDuration = this.cacheDuration ??
-                    this.app.templatesCacheDuration;
-                renderedHtml = cacheDuration > 0
-                    ? await awaitWithSignal(this.app.getOrSetCachedTemplate(cacheKey, cacheDuration, () => renderTemplate(null)), this.abortSignal)
-                    : await awaitWithSignal(renderTemplate(), this.abortSignal);
+            if (this.useServer) {
+                renderedHtml = await this._fetchHTML(this.abortSignal);
             }
             else {
-                renderedHtml = await awaitWithSignal(renderTemplate(), this.abortSignal);
+                const renderTemplate = async () => {
+                    if (!this.markup) {
+                        const markup = this.innerHTML.trim();
+                        return markup;
+                    }
+                    return await this._markup();
+                };
+                if (this.cache) {
+                    const cacheKey = this.templateCacheKey();
+                    if (typeof cacheKey !== "string" ||
+                        cacheKey.trim().length === 0) {
+                        throw new TypeError("templateCacheKey must return a non-empty string.");
+                    }
+                    const cacheDuration = this.cacheDuration ??
+                        this.app.templatesCacheDuration;
+                    renderedHtml = cacheDuration > 0
+                        ? await awaitWithSignal(this.app.getOrSetCachedTemplate(cacheKey, cacheDuration, renderTemplate), this.abortSignal)
+                        : await awaitWithSignal(renderTemplate(), this.abortSignal);
+                }
+                else {
+                    renderedHtml = await awaitWithSignal(renderTemplate(), this.abortSignal);
+                }
             }
             this.abortSignal.throwIfAborted();
             this.innerHTML = renderedHtml;
@@ -459,15 +463,82 @@ export class CustomElement extends HTMLElement {
         }
     };
     _fetchHTML = async (signal = this.abortSignal) => {
-        return await this.fetchHTML({
+        const request = this._createFetchHTMLRequest();
+        return await this.fetchHTML(request, {
+            signal,
+            cache: this.cache,
+            cacheDuration: this.cacheDuration ??
+                this.app.templatesCacheDuration,
+            cacheKey: this.cache
+                ? this.templateCacheKey(request)
+                : null,
+        });
+    };
+    _createFetchHTMLRequest = () => {
+        return {
             tagName: this.tagName.toLowerCase(),
             groupName: this.groupName == null ? "default" : this.groupName,
             queryParameters: this.app.queryParameters || {},
-            routeParameters: this.app?.router.routeParameters || {},
+            routeParameters: this.app.currentRouteParameters,
             attributes: this.args,
-        }, signal);
+        };
     };
-    fetchHTML = async (request, signal = this.abortSignal) => {
+    _resolveFetchHTMLRequest = (request) => {
+        const tagName = request.tagName.trim().toLowerCase();
+        if (tagName.length === 0) {
+            throw new TypeError("Server component tagName must be a non-empty string.");
+        }
+        return {
+            tagName,
+            groupName: request.groupName?.trim() || "default",
+            queryParameters: request.queryParameters ??
+                this.app.queryParameters,
+            routeParameters: request.routeParameters ??
+                this.app.currentRouteParameters,
+            attributes: request.attributes ?? {},
+        };
+    };
+    fetchHTML = async (request, optionsOrSignal = {}) => {
+        const options = optionsOrSignal instanceof AbortSignal
+            ? { signal: optionsOrSignal }
+            : optionsOrSignal === null
+                ? { signal: null }
+                : optionsOrSignal;
+        const signal = options.signal === undefined
+            ? this.abortSignal
+            : options.signal;
+        const resolvedRequest = this._resolveFetchHTMLRequest(request);
+        signal?.throwIfAborted();
+        const cacheDuration = options.cacheDuration ??
+            this.app.templatesCacheDuration;
+        if (!Number.isFinite(cacheDuration) ||
+            cacheDuration < 0) {
+            throw new TypeError("cacheDuration must be a finite, non-negative number.");
+        }
+        if (!options.cache || cacheDuration === 0) {
+            return await this._requestHTML(resolvedRequest, signal);
+        }
+        const cacheKey = options.cacheKey ??
+            this.app.getServerComponentCacheKey(resolvedRequest);
+        if (typeof cacheKey !== "string" ||
+            cacheKey.trim().length === 0) {
+            throw new TypeError("Server component cache key must return a non-empty string.");
+        }
+        const sharedRequest = this.app.getOrSetCachedTemplate(cacheKey, cacheDuration, () => this._requestHTML(resolvedRequest, null));
+        return signal
+            ? await awaitWithSignal(sharedRequest, signal)
+            : await sharedRequest;
+    };
+    prefetchHTML = async (request, options = {}) => {
+        return await this.fetchHTML(request, {
+            signal: null,
+            cache: true,
+            cacheDuration: options.cacheDuration ??
+                this.app.templatesCacheDuration,
+            cacheKey: options.cacheKey ?? null,
+        });
+    };
+    _requestHTML = async (request, signal) => {
         signal?.throwIfAborted();
         if (!this.app.serverComponentsUrl) {
             throw new Error("If using server components you need to provide the " +
@@ -475,7 +546,10 @@ export class CustomElement extends HTMLElement {
         }
         let response;
         try {
-            const url = `${this.app.serverComponentsUrl}?${this.app.createQueryParametersString(this.app.queryParameters)}`;
+            const queryString = this.app.createQueryParametersString(request.queryParameters);
+            const url = queryString
+                ? `${this.app.serverComponentsUrl}?${queryString}`
+                : this.app.serverComponentsUrl;
             response = await fetch(url, {
                 method: "POST",
                 signal,
@@ -492,7 +566,7 @@ export class CustomElement extends HTMLElement {
         }
         signal?.throwIfAborted();
         if (!response.ok) {
-            return this._checkFetchHTMLError(response);
+            return this._checkFetchHTMLError(response, request);
         }
         try {
             const text = await response.text();
@@ -507,23 +581,23 @@ export class CustomElement extends HTMLElement {
             if (error instanceof MarkupFetchError) {
                 throw error;
             }
-            throw new MarkupFetchError("Failed to read fetched html markup for 2xx responses.", this.tagName);
+            throw new MarkupFetchError("Failed to read fetched html markup for 2xx responses.", request.tagName);
         }
     };
-    _checkFetchHTMLError = (response) => {
+    _checkFetchHTMLError = (response, request) => {
         const requestedPath = `${location.pathname}${location.search}`;
         if (response.status >= 500) {
             throw new InternalServerError(`Server component fetch failed with status ${response.status}`);
         }
         switch (response.status) {
             case 400:
-                throw new ServerComponentBadRequestResponse(this.tagName.toLowerCase(), this.groupName || "default");
+                throw new ServerComponentBadRequestResponse(request.tagName, request.groupName);
             case 401:
                 throw new AuthenticationError(requestedPath);
             case 403:
                 throw new AuthorizationError(requestedPath, []);
             case 404:
-                throw new ServerComponentNotFound(this.tagName.toLowerCase(), this.groupName || "default");
+                throw new ServerComponentNotFound(request.tagName, request.groupName);
             default:
                 throw new HttpRequestError("POST", response);
         }

@@ -2,7 +2,7 @@ export { default as App, dataEventEnum, } from "./app.js";
 export type { AppConfig, AppContainer, AppDataChangeDetail, AppDataChangeEvent, AppQueryChangeDetail, AppQueryChangeEvent, DataStructure, } from "./app.js";
 export { component, page, layout, getElementMetadata, requireElementMetadata, } from "./elementMetadata.js";
 export { default as CustomElement, html } from "./customElement.js";
-export type { CustomElementClass, FetchHtmlRequest, InitializationState, } from "./customElement.js";
+export type { CustomElementClass, FetchHtmlOptions, FetchHtmlRequest, InitializationState, PrefetchHtmlOptions, ResolvedFetchHtmlRequest, } from "./customElement.js";
 export type { ElementKind, ElementMetadata, ComponentConfigs, ComponentMetadata, PageConfigs, PageMetadata, LayoutMetadata, AuthenticationMetadata, SubLayoutConfig, } from "./elementMetadata.js";
 export { default as Router, routeEventsEnum, } from "./router.js";
 export { auth } from "./auth.js";

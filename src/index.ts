@@ -29,8 +29,11 @@ export {
 
 export type {
     CustomElementClass,
+    FetchHtmlOptions,
     FetchHtmlRequest,
     InitializationState,
+    PrefetchHtmlOptions,
+    ResolvedFetchHtmlRequest,
 } from "./customElement.js"
 
 export type {

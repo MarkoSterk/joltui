@@ -1,4 +1,4 @@
-import Router from "./router.js";
+import Router, {} from "./router.js";
 import { isElementCancellation } from "./cancellation.js";
 import ErrorHandler, {} from "./errorHandler.js";
 import { CustomElement, } from "./customElement.js";
@@ -611,6 +611,9 @@ class App {
         }
         return this._router;
     }
+    get currentRouteParameters() {
+        return this._router?.routeParameters ?? {};
+    }
     get appName() {
         return this._appName;
     }
@@ -689,6 +692,16 @@ class App {
             routeParameters,
             queryParameters,
             args,
+        });
+    }
+    getServerComponentCacheKey(request) {
+        return stableSerialize({
+            type: "server-component",
+            tagName: request.tagName.trim().toLowerCase(),
+            groupName: request.groupName?.trim() || "default",
+            routeParameters: request.routeParameters ?? {},
+            queryParameters: request.queryParameters ?? {},
+            attributes: request.attributes ?? {},
         });
     }
     setCachedTemplate(key, template, duration) {

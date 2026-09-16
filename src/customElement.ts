@@ -133,11 +133,31 @@ export class MarkupFetchError extends Error{
 
 export type FetchHtmlRequest = {
     tagName: string;
-    groupName: string;
+    groupName?: string | null;
     routeParameters?: Record<string, string|number>|null;
-    queryParameters?: Record<string, string>;
-    attributes?: Record<string, any>
+    queryParameters?: Record<string, string> | null;
+    attributes?: Record<string, unknown> | null;
 }
+
+export type ResolvedFetchHtmlRequest = {
+    tagName: string;
+    groupName: string;
+    routeParameters: Record<string, string | number>;
+    queryParameters: Record<string, string>;
+    attributes: Record<string, unknown>;
+};
+
+export type FetchHtmlOptions = {
+    signal?: AbortSignal | null;
+    cache?: boolean;
+    cacheDuration?: number | null;
+    cacheKey?: string | null;
+};
+
+export type PrefetchHtmlOptions = Omit<
+    FetchHtmlOptions,
+    "signal" | "cache"
+>;
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -682,11 +702,15 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
     }
 
-    templateCacheKey(): string {
-        return this.app.getTemplateCacheKey(
-            this.tagName,
-            this.args,
-        );
+    templateCacheKey(
+        request?: FetchHtmlRequest,
+    ): string {
+        return request
+            ? this.app.getServerComponentCacheKey(request)
+            : this.app.getTemplateCacheKey(
+                  this.tagName,
+                  this.args,
+              );
     }
 
     protected _normalizePrerenderedAttributes(element: Element): void {
@@ -779,48 +803,58 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     render = async (): Promise<void> => {
         try {
             this.abortSignal.throwIfAborted();
-            const renderTemplate = async (
-                signal: AbortSignal | null = this.abortSignal,
-            ): Promise<string> => {
-                if(this.useServer){
-                    return await this._fetchHTML(signal);
-                }
+
+            let renderedHtml: string;
+
+            if (this.useServer) {
+                renderedHtml = await this._fetchHTML(
+                    this.abortSignal,
+                );
+            } else {
+                const renderTemplate = async (): Promise<string> => {
                 if (!this.markup) {
                     const markup = this.innerHTML.trim();
                     return markup;
                 }
                 return await this._markup();
-            }
+                };
 
-            let renderedHtml: string;
+                if (this.cache) {
+                    const cacheKey =
+                        this.templateCacheKey();
 
-            if (this.cache) {
-                const cacheKey =
-                    this.templateCacheKey();
-
-                if (
-                    (
+                    if (
                         typeof cacheKey !== "string" ||
                         cacheKey.trim().length === 0
-                    )
-                ) {
-                    throw new TypeError(
-                        "templateCacheKey must return a non-empty string.",
+                    ) {
+                        throw new TypeError(
+                            "templateCacheKey must return a non-empty string.",
+                        );
+                    }
+
+                    const cacheDuration =
+                        this.cacheDuration ??
+                        this.app.templatesCacheDuration;
+
+                    renderedHtml = cacheDuration > 0
+                        ? await awaitWithSignal(
+                              this.app.getOrSetCachedTemplate(
+                                  cacheKey,
+                                  cacheDuration,
+                                  renderTemplate,
+                              ),
+                              this.abortSignal,
+                          )
+                        : await awaitWithSignal(
+                              renderTemplate(),
+                              this.abortSignal,
+                          );
+                } else {
+                    renderedHtml = await awaitWithSignal(
+                        renderTemplate(),
+                        this.abortSignal,
                     );
                 }
-                const cacheDuration =
-                    this.cacheDuration ??
-                    this.app.templatesCacheDuration;
-
-                renderedHtml = cacheDuration > 0
-                    ? await awaitWithSignal(this.app.getOrSetCachedTemplate(
-                        cacheKey,
-                        cacheDuration,
-                        () => renderTemplate(null),
-                    ), this.abortSignal)
-                    : await awaitWithSignal(renderTemplate(), this.abortSignal);
-            } else {
-                renderedHtml = await awaitWithSignal(renderTemplate(), this.abortSignal);
             }
 
             this.abortSignal.throwIfAborted();
@@ -835,18 +869,141 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     _fetchHTML = async (
         signal: AbortSignal | null = this.abortSignal,
     ): Promise<string> => {
-        return await this.fetchHTML({
+        const request = this._createFetchHTMLRequest();
+
+        return await this.fetchHTML(request, {
+            signal,
+            cache: this.cache,
+            cacheDuration:
+                this.cacheDuration ??
+                this.app.templatesCacheDuration,
+            cacheKey: this.cache
+                ? this.templateCacheKey(request)
+                : null,
+        });
+    }
+
+    protected _createFetchHTMLRequest = (): FetchHtmlRequest => {
+        return {
             tagName: this.tagName.toLowerCase(),
             groupName: this.groupName == null ? "default" : this.groupName,
             queryParameters: this.app.queryParameters || {},
-            routeParameters: this.app?.router.routeParameters || {},
+            routeParameters: this.app.currentRouteParameters,
             attributes: this.args,
-        }, signal);
+        };
+    }
+
+    protected _resolveFetchHTMLRequest = (
+        request: FetchHtmlRequest,
+    ): ResolvedFetchHtmlRequest => {
+        const tagName = request.tagName.trim().toLowerCase();
+
+        if (tagName.length === 0) {
+            throw new TypeError(
+                "Server component tagName must be a non-empty string.",
+            );
+        }
+
+        return {
+            tagName,
+            groupName: request.groupName?.trim() || "default",
+            queryParameters:
+                request.queryParameters ??
+                this.app.queryParameters,
+            routeParameters:
+                request.routeParameters ??
+                this.app.currentRouteParameters,
+            attributes: request.attributes ?? {},
+        };
     }
 
     fetchHTML = async (
         request: FetchHtmlRequest,
-        signal: AbortSignal | null = this.abortSignal,
+        optionsOrSignal: FetchHtmlOptions | AbortSignal | null = {},
+    ): Promise<string> => {
+        const options: FetchHtmlOptions =
+            optionsOrSignal instanceof AbortSignal
+                ? { signal: optionsOrSignal }
+                : optionsOrSignal === null
+                  ? { signal: null }
+                  : optionsOrSignal;
+        const signal = options.signal === undefined
+            ? this.abortSignal
+            : options.signal;
+        const resolvedRequest =
+            this._resolveFetchHTMLRequest(request);
+
+        signal?.throwIfAborted();
+
+        const cacheDuration =
+            options.cacheDuration ??
+            this.app.templatesCacheDuration;
+
+        if (
+            !Number.isFinite(cacheDuration) ||
+            cacheDuration < 0
+        ) {
+            throw new TypeError(
+                "cacheDuration must be a finite, non-negative number.",
+            );
+        }
+
+        if (!options.cache || cacheDuration === 0) {
+            return await this._requestHTML(
+                resolvedRequest,
+                signal,
+            );
+        }
+
+        const cacheKey = options.cacheKey ??
+            this.app.getServerComponentCacheKey(
+                resolvedRequest,
+            );
+
+        if (
+            typeof cacheKey !== "string" ||
+            cacheKey.trim().length === 0
+        ) {
+            throw new TypeError(
+                "Server component cache key must return a non-empty string.",
+            );
+        }
+
+        const sharedRequest =
+            this.app.getOrSetCachedTemplate(
+                cacheKey,
+                cacheDuration,
+                () => this._requestHTML(
+                    resolvedRequest,
+                    null,
+                ),
+            );
+
+        return signal
+            ? await awaitWithSignal(
+                  sharedRequest,
+                  signal,
+              )
+            : await sharedRequest;
+    };
+
+    prefetchHTML = async (
+        request: FetchHtmlRequest,
+        options: PrefetchHtmlOptions = {},
+    ): Promise<string> => {
+        return await this.fetchHTML(request, {
+            signal: null,
+            cache: true,
+            cacheDuration:
+                options.cacheDuration ??
+                this.app.templatesCacheDuration,
+            cacheKey: options.cacheKey ?? null,
+        });
+    };
+
+    protected _requestHTML = async (
+        request: ResolvedFetchHtmlRequest,
+        signal: AbortSignal | null,
     ): Promise<string> => {
         signal?.throwIfAborted();
         if (!this.app.serverComponentsUrl) {
@@ -857,7 +1014,13 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
         let response: Response;
         try {
-            const url = `${this.app.serverComponentsUrl}?${this.app.createQueryParametersString(this.app.queryParameters)}`;
+            const queryString =
+                this.app.createQueryParametersString(
+                    request.queryParameters,
+                );
+            const url = queryString
+                ? `${this.app.serverComponentsUrl}?${queryString}`
+                : this.app.serverComponentsUrl;
             response = await fetch(url, {
                 method: "POST",
                 signal,
@@ -876,7 +1039,10 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
         signal?.throwIfAborted();
         if (!response.ok) {
-            return this._checkFetchHTMLError(response);
+            return this._checkFetchHTMLError(
+                response,
+                request,
+            );
         }
         try {
             const text = await response.text();
@@ -895,12 +1061,15 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             }
             throw new MarkupFetchError(
                 "Failed to read fetched html markup for 2xx responses.",
-                this.tagName
+                request.tagName,
             );
         }
     };
 
-    _checkFetchHTMLError = (response: Response): never => {
+    _checkFetchHTMLError = (
+        response: Response,
+        request: ResolvedFetchHtmlRequest,
+    ): never => {
         const requestedPath =
             `${location.pathname}${location.search}`;
 
@@ -909,13 +1078,13 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         }
         switch(response.status){
             case 400:
-                throw new ServerComponentBadRequestResponse(this.tagName.toLowerCase(), this.groupName || "default");
+                throw new ServerComponentBadRequestResponse(request.tagName, request.groupName);
             case 401:   
                 throw new AuthenticationError(requestedPath);
             case 403:
                 throw new AuthorizationError(requestedPath, []);
             case 404:
-                throw new ServerComponentNotFound(this.tagName.toLowerCase(), this.groupName || "default")
+                throw new ServerComponentNotFound(request.tagName, request.groupName)
             default:
                 throw new HttpRequestError("POST", response);
         }

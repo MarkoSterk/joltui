@@ -70,7 +70,6 @@ class TestElement extends CustomElement {
     get groupName() { return "default"; }
     get args() { return {}; }
     templateCacheKey() { return "shared"; }
-    _fetchHTML = signal => this.fetchHTML({ tagName: "test-element", groupName: "default" }, signal);
 }
 
 function disconnect(element) {
@@ -449,6 +448,66 @@ test("response-body cancellation preserves the lifetime cancellation reason", as
     await reading.promise;
     disconnect(element);
     await assert.rejects(request, ElementDisconnectedError);
+});
+
+test("prefetch and render share normalized request cache keys", async t => {
+    const requests = [];
+    t.mock.method(globalThis, "fetch", async (url, init) => {
+        requests.push({ url, body: JSON.parse(init.body) });
+        return {
+            ok: true,
+            text: async () => "<p>cached</p>",
+        };
+    });
+
+    const app = makeApp();
+    app._router = {
+        routeParameters: {
+            system: "si",
+            lang: "sl",
+            researcherId: 57366,
+        },
+    };
+    Object.defineProperty(app, "queryParameters", {
+        configurable: true,
+        get: () => ({ view: "summary" }),
+    });
+
+    const element = new TestElement();
+    element._app = app;
+    const request = {
+        tagName: "researcher-page-aside",
+        groupName: "researcher",
+    };
+
+    await element.prefetchHTML(request, { cacheDuration: 3600 });
+    const cached = await element.fetchHTML(request, {
+        cache: true,
+        cacheDuration: 3600,
+    });
+
+    assert.equal(cached, "<p>cached</p>");
+    assert.equal(requests.length, 1);
+    assert.match(requests[0].url, /view=summary/);
+    assert.deepEqual(requests[0].body.routeParameters, {
+        system: "si",
+        lang: "sl",
+        researcherId: 57366,
+    });
+
+    await element.fetchHTML({
+        ...request,
+        queryParameters: {},
+        routeParameters: {},
+    }, {
+        cache: true,
+        cacheDuration: 3600,
+    });
+
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].url, "/components");
+    assert.deepEqual(requests[1].body.queryParameters, {});
+    assert.deepEqual(requests[1].body.routeParameters, {});
 });
 
 test("bound refresh after disconnection is a synchronous no-op", () => {
