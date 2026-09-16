@@ -494,11 +494,32 @@ class App<
             DataChangeListener =
             event => {
                 if (
-                    event.detail.field ===
-                    dataField
+                    event.detail.field !==
+                        dataField ||
+                    component.abortSignal.aborted
                 ) {
-                    void component.rerender();
+                    return;
                 }
+
+                void component
+                    .rerender()
+                    .catch(error => {
+                        if (
+                            isElementCancellation(
+                                error,
+                            )
+                        ) {
+                            return;
+                        }
+
+                        void this
+                            .handleErrorOnce(error)
+                            .catch(handlerError => {
+                                globalThis.reportError(
+                                    handlerError,
+                                );
+                            });
+                    });
             };
 
         const key =

@@ -209,10 +209,23 @@ class App {
             throw new Error(`Data field '${dataField}' does not exist.`);
         }
         const listener = event => {
-            if (event.detail.field ===
-                dataField) {
-                void component.rerender();
+            if (event.detail.field !==
+                dataField ||
+                component.abortSignal.aborted) {
+                return;
             }
+            void component
+                .rerender()
+                .catch(error => {
+                if (isElementCancellation(error)) {
+                    return;
+                }
+                void this
+                    .handleErrorOnce(error)
+                    .catch(handlerError => {
+                    globalThis.reportError(handlerError);
+                });
+            });
         };
         const key = this._generateListenerKey(dataField, component);
         const existingListener = this._dataChangeListeners.get(key);

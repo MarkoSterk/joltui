@@ -510,6 +510,39 @@ test("prefetch and render share normalized request cache keys", async t => {
     assert.deepEqual(requests[1].body.routeParameters, {});
 });
 
+test("data listeners consume rerender cancellation", async () => {
+    const app = makeApp();
+    app._dataStructure.set("field", null);
+
+    let listener;
+    app.addEventListener = (_type, registered) => {
+        listener = registered;
+    };
+
+    const element = new TestElement();
+    element._app = app;
+    Object.defineProperty(element, "dataField", {
+        configurable: true,
+        get: () => "field",
+    });
+
+    let rerenders = 0;
+    element.rerender = async () => {
+        rerenders++;
+        throw new ElementDisconnectedError(element.tagName);
+    };
+
+    app.registerDataListener(element);
+    listener({ detail: { field: "field" } });
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(rerenders, 1);
+
+    disconnect(element);
+    listener({ detail: { field: "field" } });
+    assert.equal(rerenders, 1);
+});
+
 test("bound refresh after disconnection is a synchronous no-op", () => {
     const element = new TestElement();
     element._app = makeApp();
