@@ -1647,9 +1647,6 @@ class App<
             routeParameters,
             queryParameters,
             args,
-            appData: Object.fromEntries(
-                this._dataStructure,
-            ),
         });
     }
 
