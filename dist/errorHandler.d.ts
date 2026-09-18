@@ -5,9 +5,9 @@ export type ErrorHandlerClass<TApp extends App = App> = new (app: TApp) => Error
 export declare function handles(...errorTypes: ErrorConstructor[]): <TThis, TError extends Error>(method: (this: TThis, error: TError) => void | Promise<void>, context: ClassMethodDecoratorContext<TThis, (this: TThis, error: TError) => void | Promise<void>>) => void;
 export default class ErrorHandler<TApp extends App> {
     protected readonly _app: TApp;
-    protected readonly _handlerMethods: Record<string, ErrorHandlerMethod>;
+    protected readonly _handlerMethods: Map<ErrorConstructor, ErrorHandlerMethod>;
     constructor(app: TApp);
-    protected _generateHandlerMethodsMapping(): Record<string, ErrorHandlerMethod>;
+    protected _generateHandlerMethodsMapping(): Map<ErrorConstructor, ErrorHandlerMethod>;
     handle(error: Error): Promise<boolean>;
     get app(): TApp;
 }

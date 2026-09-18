@@ -65,8 +65,8 @@ export function handles(
 export default class ErrorHandler<TApp extends App> {
     protected readonly _app: TApp;
 
-    protected readonly _handlerMethods: Record<
-        string,
+    protected readonly _handlerMethods: Map<
+        ErrorConstructor,
         ErrorHandlerMethod
     >;
 
@@ -75,11 +75,14 @@ export default class ErrorHandler<TApp extends App> {
         this._handlerMethods = this._generateHandlerMethodsMapping();
     }
 
-    protected _generateHandlerMethodsMapping(): Record<
-        string,
+    protected _generateHandlerMethodsMapping(): Map<
+        ErrorConstructor,
         ErrorHandlerMethod
     > {
-        const handlers: Record<string, ErrorHandlerMethod> = {};
+        const handlers = new Map<
+            ErrorConstructor,
+            ErrorHandlerMethod
+        >();
 
         let prototype: object | null = Object.getPrototypeOf(this);
 
@@ -115,13 +118,13 @@ export default class ErrorHandler<TApp extends App> {
                 const boundHandler = method.bind(this) as ErrorHandlerMethod;
 
                 for (const errorType of handledErrors) {
-                    if (handlers[errorType.name]) {
+                    if (handlers.has(errorType)) {
                         throw new Error(
                             `An error handler for "${errorType.name}" is already registered.`
                         );
                     }
 
-                    handlers[errorType.name] = boundHandler;
+                    handlers.set(errorType, boundHandler);
                 }
             }
 
@@ -138,9 +141,14 @@ export default class ErrorHandler<TApp extends App> {
             let errorType: Function | null =
                 currentError.constructor;
 
-            while (errorType && errorType !== Object) {
+            while (
+                errorType &&
+                errorType !== Function.prototype
+            ) {
                 const handler =
-                    this._handlerMethods[errorType.name];
+                    this._handlerMethods.get(
+                        errorType as ErrorConstructor,
+                    );
 
                 if (handler) {
                     await handler(currentError);

@@ -34,6 +34,8 @@ for (const name of ["innerHTML", "outerHTML"]) {
 
 const { default: CustomElement } = await import("../dist/customElement.js");
 const { default: App } = await import("../dist/app.js");
+const { default: ErrorHandler, handles } = await import("../dist/errorHandler.js");
+const { DependencyLoadError, lazy } = await import("../dist/lazy.js");
 const { Lifecycle, lifecycle } = await import("../dist/lifecycle.js");
 const { ElementDisconnectedError, awaitWithSignal } =
     await import("../dist/cancellation.js");
@@ -541,6 +543,68 @@ test("data listeners consume rerender cancellation", async () => {
     disconnect(element);
     listener({ detail: { field: "field" } });
     assert.equal(rerenders, 1);
+});
+
+test("error handlers use constructor identity instead of constructor names", async () => {
+    class FirstError extends Error {}
+    class SecondError extends Error {}
+
+    Object.defineProperty(FirstError, "name", { value: "e" });
+    Object.defineProperty(SecondError, "name", { value: "e" });
+
+    class ConstructorHandler extends ErrorHandler {
+        handled = [];
+        first(error) {
+            this.handled.push(error);
+        }
+    }
+
+    handles(FirstError)(
+        ConstructorHandler.prototype.first,
+        {
+            kind: "method",
+            name: "first",
+            static: false,
+            private: false,
+        },
+    );
+
+    const handler = new ConstructorHandler(makeApp());
+    const second = new SecondError();
+    const first = new FirstError();
+
+    assert.equal(await handler.handle(second), false);
+    assert.equal(await handler.handle(first), true);
+    assert.deepEqual(handler.handled, [first]);
+});
+
+test("lazy dependency failures include an optional dependency name", async () => {
+    const cause = new Error("Import failed");
+    const dependency = lazy(
+        async () => {
+            throw cause;
+        },
+        "researcher page dependencies",
+    );
+
+    assert.equal(dependency.name, "researcher page dependencies");
+
+    await assert.rejects(
+        dependency.load(),
+        error => {
+            assert.ok(error instanceof DependencyLoadError);
+            assert.equal(
+                error.dependencyName,
+                "researcher page dependencies",
+            );
+            assert.match(
+                error.message,
+                /researcher page dependencies/,
+            );
+            assert.equal(error.cause, cause);
+            return true;
+        },
+    );
 });
 
 test("bound refresh after disconnection is a synchronous no-op", () => {

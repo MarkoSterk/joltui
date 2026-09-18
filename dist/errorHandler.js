@@ -25,7 +25,7 @@ export default class ErrorHandler {
         this._handlerMethods = this._generateHandlerMethodsMapping();
     }
     _generateHandlerMethodsMapping() {
-        const handlers = {};
+        const handlers = new Map();
         let prototype = Object.getPrototypeOf(this);
         while (prototype &&
             prototype !== ErrorHandler.prototype &&
@@ -45,10 +45,10 @@ export default class ErrorHandler {
                 }
                 const boundHandler = method.bind(this);
                 for (const errorType of handledErrors) {
-                    if (handlers[errorType.name]) {
+                    if (handlers.has(errorType)) {
                         throw new Error(`An error handler for "${errorType.name}" is already registered.`);
                     }
-                    handlers[errorType.name] = boundHandler;
+                    handlers.set(errorType, boundHandler);
                 }
             }
             prototype = Object.getPrototypeOf(prototype);
@@ -59,8 +59,9 @@ export default class ErrorHandler {
         let currentError = error;
         while (currentError) {
             let errorType = currentError.constructor;
-            while (errorType && errorType !== Object) {
-                const handler = this._handlerMethods[errorType.name];
+            while (errorType &&
+                errorType !== Function.prototype) {
+                const handler = this._handlerMethods.get(errorType);
                 if (handler) {
                     await handler(currentError);
                     return true;
