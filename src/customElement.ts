@@ -2,6 +2,7 @@ import App, {
     type AppContainer,
     dataEventEnum,
 } from "./app.js";
+import { replaceShorthandAttributes } from "./templateAttributes.js";
 import {
     awaitWithSignal,
     ElementDisconnectedError,
@@ -39,8 +40,8 @@ import {
 export class RenderError extends Error {
     protected readonly elementName: string;
 
-    constructor(elementName: string) {
-        super(`Failed to render element ${elementName}`);
+    constructor(elementName: string, options?: ErrorOptions) {
+        super(`Failed to render element ${elementName}`, options);
         this.name = "RenderError";
         this.elementName = elementName;
     }
@@ -307,6 +308,8 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
     protected readonly _abortController = new AbortController();
 
+    protected _renderController: AbortController | null = null;
+
     get abortSignal(): AbortSignal {
         return this._abortController.signal;
     }
@@ -337,6 +340,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
         this.abortSignal.addEventListener("abort", () => {
             this._abort = true;
+            this._renderController?.abort(this.abortSignal.reason);
             this._failInitialization(this.abortSignal.reason);
         }, { once: true });
 
@@ -657,20 +661,21 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
 
     protected async _runLifecycle(
         stage: Lifecycle,
+        signal: AbortSignal = this.abortSignal,
     ): Promise<void> {
         const disconnecting = stage === Lifecycle.AFTER_DISCONNECT;
-        if (!disconnecting) this.abortSignal.throwIfAborted();
+        if (!disconnecting) signal.throwIfAborted();
         for (const { name, method } of getLifecycleMethods(this, stage)) {
             try {
                 if (disconnecting) {
                     await method.call(this);
                 } else {
-                    this.abortSignal.throwIfAborted();
+                    signal.throwIfAborted();
                     await awaitWithSignal(
                         Promise.resolve(method.call(this)),
-                        this.abortSignal,
+                        signal,
                     );
-                    this.abortSignal.throwIfAborted();
+                    signal.throwIfAborted();
                 }
             } catch (error: unknown) {
                 if (isElementCancellation(error)) throw error;
@@ -681,7 +686,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                 );
             }
         }
-        if (!disconnecting) this.abortSignal.throwIfAborted();
+        if (!disconnecting) signal.throwIfAborted();
     }
 
     protected async _markup(): Promise<string> {
@@ -698,7 +703,7 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             ) {
                 throw error;
             }
-            throw new RenderError(this.tagName);
+            throw new RenderError(this.tagName, { cause: error });
         }
     }
 
@@ -800,16 +805,23 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
         this._hydrateElements(elements);
     }
 
-    render = async (): Promise<void> => {
+    protected _beginRender(): AbortSignal {
+        this.abortSignal.throwIfAborted();
+        const previous = this._renderController;
+        this._renderController = new AbortController();
+        previous?.abort();
+        this._abort = false;
+        return this._renderController.signal;
+    }
+
+    render = async (signal: AbortSignal = this._beginRender()): Promise<void> => {
         try {
-            this.abortSignal.throwIfAborted();
+            signal.throwIfAborted();
 
             let renderedHtml: string;
 
             if (this.useServer) {
-                renderedHtml = await this._fetchHTML(
-                    this.abortSignal,
-                );
+                renderedHtml = await awaitWithSignal(this._fetchHTML(signal), signal);
             } else {
                 const renderTemplate = async (): Promise<string> => {
                 if (!this.markup) {
@@ -843,23 +855,29 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                                   cacheDuration,
                                   renderTemplate,
                               ),
-                              this.abortSignal,
+                              signal,
                           )
                         : await awaitWithSignal(
                               renderTemplate(),
-                              this.abortSignal,
+                              signal,
                           );
                 } else {
                     renderedHtml = await awaitWithSignal(
                         renderTemplate(),
-                        this.abortSignal,
+                        signal,
                     );
                 }
             }
 
-            this.abortSignal.throwIfAborted();
+            signal.throwIfAborted();
+            this._templateSettings = {
+                ...this._templateSettings,
+                dataBinds: new Map(),
+            };
             this.innerHTML = renderedHtml;
         } catch (error: unknown) {
+            if (this.abortSignal.aborted) throw this.abortSignal.reason;
+            if (signal.aborted) return;
             this._abort = true;
 
             throw error;
@@ -1091,28 +1109,32 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     }
 
     rerender = async (): Promise<void> => {
+        const signal = this._beginRender();
         try {
-            this.abortSignal.throwIfAborted();
-            this._templateSettings.dataBinds.clear();
-
             await this._runLifecycle(
                 Lifecycle.BEFORE_RERENDER,
+                signal,
             );
+            signal.throwIfAborted();
 
-            await this.render();
+            await awaitWithSignal(this.render(signal), signal);
+            signal.throwIfAborted();
 
             if (this._abort) {
                 return;
             }
 
-            await this._waitForSubelements();
+            await awaitWithSignal(this._waitForSubelements(), signal);
+            signal.throwIfAborted();
 
             await this._runLifecycle(
                 Lifecycle.AFTER_RERENDER,
+                signal,
             );
         } catch (error: unknown) {
-            this._abort = true;
             if (this.abortSignal.aborted) throw this.abortSignal.reason;
+            if (signal.aborted) return;
+            this._abort = true;
             await this._handleError(error);
             throw error;
         }
@@ -1548,19 +1570,13 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     protected _replaceAtWithJolt(
         template: string,
     ): string {
-        return template.replace(
-            /@([a-z][a-z0-9]*(?:-[a-z0-9]+)*)=/g,
-            "jolt-$1=",
-        );
+        return replaceShorthandAttributes(template, "@", "jolt-");
     }
 
     protected _replaceColonWithData(
         template: string,
     ): string {
-        return template.replace(
-            /:([a-z][a-z0-9]*(?:-[a-z0-9]+)*)=/g,
-            "data-jolt-$1=",
-        );
+        return replaceShorthandAttributes(template, ":", "data-jolt-");
     }
 
     getData(field: string): unknown {

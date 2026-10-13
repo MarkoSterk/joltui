@@ -13,16 +13,13 @@ import {
 import { NotImplementedError } from "./utilities.js";
 import { AuthenticationError, AuthorizationError } from "./auth.js";
 import { getGeneratedPages } from "./generatedPages.js";
+import { awaitWithSignal } from "./cancellation.js";
 
 export const routeEventsEnum = {
     START: "route-change.start",
     FINISHED: "route-change.finished",
     LAYOUT_CHANGE_FINISHED:
         "route-change.layout-change.finished",
-    ERROR_PAGE_START:
-        "route-change.error-page.start",
-    ERROR_PAGE_FINISHED:
-        "route-change.error-page.finished",
 } as const;
 
 export class RouteFailedError extends Error {
@@ -114,7 +111,6 @@ export type Route<
     authentication: Authentication | null;
     authenticationChain:
         readonly RouteAuthenticationRequirement<TApp>[];
-    roles: unknown[] | null;
 };
 
 export type ParsedRoute<
@@ -131,7 +127,6 @@ export type ParsedRoute<
     authenticationChain:
         readonly RouteAuthenticationRequirement<TApp>[];
     args: HandlerArgs | null;
-    roles: unknown[] | null;
     route: string;
 };
 
@@ -159,6 +154,14 @@ export type RedirectOptions = {
     baseParameters?: RouteParameters;
 };
 
+export type ErrorPageOptions<TApp extends App = App> = {
+    layout?: CustomElementClass<TApp>;
+    target?: string;
+    title?: string | null;
+    args?: HandlerArgs | null;
+    error?: Error;
+};
+
 type RouteParameterType = "str" | "int";
 
 type RouteSpecificity = {
@@ -175,6 +178,12 @@ type ScrollPosition = {
 
 type CurrentState = {
     scrollPosition: ScrollPosition;
+};
+
+type Navigation = {
+    controller: AbortController;
+    elements: Set<CustomElement>;
+    renderingErrorPage?: boolean;
 };
 
 type ActiveSubLayout<
@@ -214,7 +223,8 @@ class Router<TApp extends App> {
 
     protected _currentRoute: MatchedRoute<TApp> | null = null;
     protected _routeParameters: RouteParameters = {};
-    protected _inTransition = false;
+    protected _navigation: Navigation | null = null;
+    protected readonly _errorNavigations = new WeakMap<Error, Navigation>();
     protected _activeSubLayouts:
         ActiveSubLayout<TApp>[] = [];
 
@@ -314,7 +324,7 @@ class Router<TApp extends App> {
         );
     }
 
-    titleGenerator(tagName: string, title: string|null): MaybePromise<string>{
+    titleGenerator(_tagName: string, _title: string|null): MaybePromise<string>{
         return null as unknown as MaybePromise<string>;
     }
 
@@ -445,7 +455,6 @@ class Router<TApp extends App> {
             authentication:
                 metadata.authentication,
             authenticationChain,
-            roles: metadata.roles,
         };
     }
 
@@ -533,7 +542,6 @@ class Router<TApp extends App> {
                     authenticationChain:
                         route.authenticationChain,
                     args: null,
-                    roles: route.roles,
                     route: route.path,
                 },
             );
@@ -751,7 +759,10 @@ class Router<TApp extends App> {
     protected _popStateHandler = async (
         event: PopStateEvent,
     ): Promise<void> => {
-        await this.route();
+        const routing = this.route();
+        const navigation = this._navigation;
+        await routing;
+        if (navigation !== this._navigation) return;
 
         const state = event.state as
             | CurrentState
@@ -803,12 +814,6 @@ class Router<TApp extends App> {
 
         event.preventDefault();
 
-        if (this._inTransition) {
-            return;
-        }
-
-        this._inTransition = true;
-
         try {
             await this.redirect(anchor.href);
         } catch (error: unknown) {
@@ -817,13 +822,72 @@ class Router<TApp extends App> {
                     cause: error,
                 }),
             );
+        }
+    };
+
+    protected _beginNavigation(): Navigation {
+        const previous = this._navigation;
+        const navigation: Navigation = {
+            controller: new AbortController(),
+            elements: new Set(),
+        };
+        this._navigation = navigation;
+        previous?.controller.abort();
+        for (const element of previous?.elements ?? []) {
+            element.remove();
+        }
+        return navigation;
+    }
+
+    showErrorPage = async (
+        handler: CustomElementClass<TApp>,
+        options: ErrorPageOptions<TApp> = {},
+    ): Promise<void> => {
+        const origin = options.error ? this._errorNavigations.get(options.error) : undefined;
+        if (origin?.controller.signal.aborted) return;
+        if (this._navigation?.renderingErrorPage) {
+            throw new Error("Cannot render an error page while another error page is initializing.", {
+                cause: options.error,
+            });
+        }
+        const layout = options.layout ?? this._baseLayout;
+        for (const element of [handler, layout]) {
+            if (!isCustomElementClass<TApp>(element)) {
+                throw new TypeError("Error pages require CustomElement classes.");
+            }
+            const metadata = requireElementMetadata(element);
+            if (customElements.get(metadata.tagName) !== element) {
+                throw new Error(`Element '${metadata.tagName}' is not registered.`);
+            }
+        }
+        if (requireElementMetadata(layout).kind !== "layout") {
+            throw new TypeError("Error page layouts must use @layout.");
+        }
+        const navigation = this._beginNavigation();
+        navigation.renderingErrorPage = true;
+        this._currentRoute = null;
+        this._routeParameters = {};
+        try {
+            await awaitWithSignal(this._loadPath({
+                handler,
+                layout,
+                target: options.target ?? this._defaultTarget,
+                subLayouts: [],
+                title: options.title ?? null,
+                args: options.args ?? null,
+            }, navigation, null), navigation.controller.signal);
+        } catch (error: unknown) {
+            if (!navigation.controller.signal.aborted) throw error;
         } finally {
-            this._inTransition = false;
+            navigation.renderingErrorPage = false;
+            navigation.elements.clear();
         }
     };
 
     route = async (): Promise<void> => {
+        const navigation = this._beginNavigation();
         try {
+            navigation.controller.signal.throwIfAborted();
             let path = location.pathname;
 
             if (!path) {
@@ -833,16 +897,29 @@ class Router<TApp extends App> {
             const matchedPath =
                 this._matchRoute(path);
 
-            await this._authorizeRoute(matchedPath);
+            await awaitWithSignal(
+                this._authorizeRoute(matchedPath, navigation),
+                navigation.controller.signal,
+            );
+            navigation.controller.signal.throwIfAborted();
 
-            await this._loadPath(matchedPath);
+            this._routeParameters = matchedPath.parameters;
+            await awaitWithSignal(
+                this._loadPath(matchedPath, navigation, matchedPath),
+                navigation.controller.signal,
+            );
         } catch (error: unknown) {
+            if (navigation.controller.signal.aborted) return;
+            if (error instanceof Error) this._errorNavigations.set(error, navigation);
             await this.app.handleErrorOnce(error);
+        } finally {
+            navigation.elements.clear();
         }
     };
 
     protected _authorizeRoute = async (
         matchedPath: MatchedRoute<TApp>,
+        navigation: Navigation,
     ): Promise<void> => {
         const requirements =
             matchedPath.authenticationChain.filter(
@@ -855,7 +932,12 @@ class Router<TApp extends App> {
             return;
         }
 
-        if (!(await this.isAuthenticated())) {
+        const authenticated = await awaitWithSignal(
+            Promise.resolve(this.isAuthenticated()),
+            navigation.controller.signal,
+        );
+        navigation.controller.signal.throwIfAborted();
+        if (!authenticated) {
             throw new AuthenticationError(
                 matchedPath.path,
             );
@@ -870,10 +952,11 @@ class Router<TApp extends App> {
                 continue;
             }
 
-            const authorized =
-                await this.checkUserRoles([
-                    ...requiredRoles,
-                ]);
+            const authorized = await awaitWithSignal(
+                Promise.resolve(this.checkUserRoles([...requiredRoles])),
+                navigation.controller.signal,
+            );
+            navigation.controller.signal.throwIfAborted();
 
             if (!authorized) {
                 throw new AuthorizationError(
@@ -885,13 +968,20 @@ class Router<TApp extends App> {
     };
 
     protected _loadPath = async (
-        matchedPath: MatchedRoute<TApp>,
+        matchedPath: Pick<ParsedRoute<TApp>, "handler" | "layout" | "target" | "subLayouts" | "title" | "args">,
+        navigation: Navigation,
+        currentRoute: MatchedRoute<TApp> | null,
     ): Promise<void> => {
+        const signal = navigation.controller.signal;
+        signal.throwIfAborted();
         this._emitRouteEvent(routeEventsEnum.START);
+        signal.throwIfAborted();
 
         await this._renderLayout(
             matchedPath.layout,
+            navigation,
         );
+        signal.throwIfAborted();
 
         const layout = Array.from(
             this.app.container.children,
@@ -907,13 +997,16 @@ class Router<TApp extends App> {
             );
         }
 
-        await layout.initComplete;
+        await awaitWithSignal(layout.initComplete, signal);
+        signal.throwIfAborted();
 
         const pageRoot =
             await this._renderSubLayouts(
                 layout,
                 matchedPath.subLayouts,
+                navigation,
             );
+        signal.throwIfAborted();
 
         const targetContainer =
             this._findLayoutTarget(
@@ -943,11 +1036,16 @@ class Router<TApp extends App> {
             ) as CustomElement<TApp> | null;
 
         if (generatedHandler) {
-            await generatedHandler.initComplete;
+            this._trackNavigationElement(generatedHandler, navigation);
+            await awaitWithSignal(generatedHandler.initComplete, signal);
         }
+        signal.throwIfAborted();
 
-        await this._setTitle(matchedPath.handler.tagName.toLowerCase(), matchedPath.title);
-        this.currentRoute = matchedPath;
+        await this._setTitle(matchedPath.handler.tagName.toLowerCase(), matchedPath.title, navigation);
+        signal.throwIfAborted();
+        this.currentRoute = currentRoute;
+        navigation.elements.clear();
+        navigation.renderingErrorPage = false;
         this._emitRouteEvent(
             routeEventsEnum.FINISHED,
         );
@@ -957,7 +1055,10 @@ class Router<TApp extends App> {
         baseLayout: CustomElement<TApp>,
         subLayouts:
             readonly SubLayoutConfig<TApp>[],
+        navigation: Navigation,
     ): Promise<CustomElement<TApp>> {
+        const signal = navigation.controller.signal;
+        signal.throwIfAborted();
         let renderRoot = baseLayout;
 
         for (
@@ -993,8 +1094,8 @@ class Router<TApp extends App> {
                     targetContainer;
 
             if (canReuse) {
-                await activeSubLayout.element
-                    .initComplete;
+                await awaitWithSignal(activeSubLayout.element.initComplete, signal);
+                signal.throwIfAborted();
                 renderRoot =
                     activeSubLayout.element;
                 continue;
@@ -1022,6 +1123,8 @@ class Router<TApp extends App> {
                 );
             }
 
+            this._trackNavigationElement(subLayoutElement, navigation);
+
             subLayoutElement.setAttribute(
                 "data-jolt-router-layout",
                 "",
@@ -1031,7 +1134,8 @@ class Router<TApp extends App> {
                 String(index),
             );
 
-            await subLayoutElement.initComplete;
+            await awaitWithSignal(subLayoutElement.initComplete, signal);
+            signal.throwIfAborted();
 
             this._activeSubLayouts.push({
                 target: subLayout.target,
@@ -1083,7 +1187,10 @@ class Router<TApp extends App> {
 
     protected _renderLayout = async (
         layout: CustomElementClass<TApp>,
+        navigation: Navigation,
     ): Promise<void> => {
+        const signal = navigation.controller.signal;
+        signal.throwIfAborted();
         const existingLayout = Array.from(
             this.app.container.children,
         ).find(
@@ -1092,7 +1199,8 @@ class Router<TApp extends App> {
         ) as CustomElement<TApp> | undefined;
 
         if (existingLayout) {
-            await existingLayout.initComplete;
+            await awaitWithSignal(existingLayout.initComplete, signal);
+            signal.throwIfAborted();
             return;
         }
 
@@ -1115,7 +1223,9 @@ class Router<TApp extends App> {
             );
         }
 
-        await layoutElement.initComplete;
+        this._trackNavigationElement(layoutElement, navigation);
+        await awaitWithSignal(layoutElement.initComplete, signal);
+        signal.throwIfAborted();
         this._emitRouteEvent(
             routeEventsEnum.LAYOUT_CHANGE_FINISHED,
         );
@@ -1124,12 +1234,29 @@ class Router<TApp extends App> {
     protected async _setTitle(
         tagName: string,
         title: string | null,
+        navigation: Navigation,
     ): Promise<void> {
-        
-        const titleCandidate: string|null = await this.titleGenerator(tagName, title) || title;
+        const signal = navigation.controller.signal;
+        signal.throwIfAborted();
+        const titleCandidate = await awaitWithSignal(
+            Promise.resolve(this.titleGenerator(tagName, title)),
+            signal,
+        ) || title;
+        signal.throwIfAborted();
         if(titleCandidate){
-            this.setTitle(titleCandidate);
+            await this.setTitle(titleCandidate);
         }
+    }
+
+    protected _trackNavigationElement(
+        element: CustomElement,
+        navigation: Navigation,
+    ): void {
+        if (navigation.controller.signal.aborted) {
+            element.remove();
+            navigation.controller.signal.throwIfAborted();
+        }
+        navigation.elements.add(element);
     }
 
     async setTitle(title: string){
@@ -1192,13 +1319,7 @@ class Router<TApp extends App> {
                             return "([^/]+)";
                         }
 
-                        if (type === "int") {
-                            return "(\\d+)";
-                        }
-
-                        throw new UnsupportedRouteParameterType(
-                            type,
-                        );
+                        return "(\\d+)";
                     },
                 );
 
@@ -1245,8 +1366,6 @@ class Router<TApp extends App> {
                         );
             }
 
-            this._routeParameters = parameters;
-
             return {
                 ...config,
                 path: normalizedPath,
@@ -1255,7 +1374,6 @@ class Router<TApp extends App> {
             };
         }
 
-        this._routeParameters = {};
         throw new RouteNotFoundError(
             normalizedPath,
         );

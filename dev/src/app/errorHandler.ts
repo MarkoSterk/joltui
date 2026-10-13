@@ -1,11 +1,11 @@
 import {
     AuthenticationError,
-    AuthorizationError,
     ErrorHandler,
     RouteNotFoundError,
     handles,
 } from "joltui";
 import type FieldnotesApp from "./app.js";
+import NotFoundPage from "./errorPages/notFoundPage.js";
 
 export default class BlogErrorHandler extends ErrorHandler<FieldnotesApp> {
     @handles(AuthenticationError)
@@ -16,7 +16,10 @@ export default class BlogErrorHandler extends ErrorHandler<FieldnotesApp> {
     }
 
     @handles(RouteNotFoundError)
-    async routeNotFound(): Promise<void> {
-        await this.app.router.redirect("/404");
+    async routeNotFound(error: RouteNotFoundError): Promise<void> {
+        await this.app.router.showErrorPage(NotFoundPage, {
+            error,
+            title: "ecris.frontend.pages.notFound",
+        });
     }
 }

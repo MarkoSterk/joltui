@@ -4,12 +4,11 @@ import { requireElementMetadata, } from "./elementMetadata.js";
 import { NotImplementedError } from "./utilities.js";
 import { AuthenticationError, AuthorizationError } from "./auth.js";
 import { getGeneratedPages } from "./generatedPages.js";
+import { awaitWithSignal } from "./cancellation.js";
 export const routeEventsEnum = {
     START: "route-change.start",
     FINISHED: "route-change.finished",
     LAYOUT_CHANGE_FINISHED: "route-change.layout-change.finished",
-    ERROR_PAGE_START: "route-change.error-page.start",
-    ERROR_PAGE_FINISHED: "route-change.error-page.finished",
 };
 export class RouteFailedError extends Error {
     constructor(options) {
@@ -56,7 +55,8 @@ class Router {
     _routesMap;
     _currentRoute = null;
     _routeParameters = {};
-    _inTransition = false;
+    _navigation = null;
+    _errorNavigations = new WeakMap();
     _activeSubLayouts = [];
     constructor({ baseUrl = "", baseLayout, defaultTarget, indexRoute = "/", app, pages, }) {
         if (!app) {
@@ -104,7 +104,7 @@ class Router {
     checkUserRoles(_roles) {
         throw new NotImplementedError("Router.checkUserRoles");
     }
-    titleGenerator(tagName, title) {
+    titleGenerator(_tagName, _title) {
         return null;
     }
     _discoverRoutes() {
@@ -166,7 +166,6 @@ class Router {
             extras: metadata.extras,
             authentication: metadata.authentication,
             authenticationChain,
-            roles: metadata.roles,
         };
     }
     _createAuthenticationChain(handler, pageMetadata, layout, layoutMetadata) {
@@ -208,7 +207,6 @@ class Router {
                 authentication: route.authentication,
                 authenticationChain: route.authenticationChain,
                 args: null,
-                roles: route.roles,
                 route: route.path,
             });
         }
@@ -332,7 +330,11 @@ class Router {
         };
     }
     _popStateHandler = async (event) => {
-        await this.route();
+        const routing = this.route();
+        const navigation = this._navigation;
+        await routing;
+        if (navigation !== this._navigation)
+            return;
         const state = event.state;
         if (state?.scrollPosition) {
             window.scrollTo(state.scrollPosition.x, state.scrollPosition.y);
@@ -362,10 +364,6 @@ class Router {
             return;
         }
         event.preventDefault();
-        if (this._inTransition) {
-            return;
-        }
-        this._inTransition = true;
         try {
             await this.redirect(anchor.href);
         }
@@ -374,31 +372,99 @@ class Router {
                 cause: error,
             }));
         }
+    };
+    _beginNavigation() {
+        const previous = this._navigation;
+        const navigation = {
+            controller: new AbortController(),
+            elements: new Set(),
+        };
+        this._navigation = navigation;
+        previous?.controller.abort();
+        for (const element of previous?.elements ?? []) {
+            element.remove();
+        }
+        return navigation;
+    }
+    showErrorPage = async (handler, options = {}) => {
+        const origin = options.error ? this._errorNavigations.get(options.error) : undefined;
+        if (origin?.controller.signal.aborted)
+            return;
+        if (this._navigation?.renderingErrorPage) {
+            throw new Error("Cannot render an error page while another error page is initializing.", {
+                cause: options.error,
+            });
+        }
+        const layout = options.layout ?? this._baseLayout;
+        for (const element of [handler, layout]) {
+            if (!isCustomElementClass(element)) {
+                throw new TypeError("Error pages require CustomElement classes.");
+            }
+            const metadata = requireElementMetadata(element);
+            if (customElements.get(metadata.tagName) !== element) {
+                throw new Error(`Element '${metadata.tagName}' is not registered.`);
+            }
+        }
+        if (requireElementMetadata(layout).kind !== "layout") {
+            throw new TypeError("Error page layouts must use @layout.");
+        }
+        const navigation = this._beginNavigation();
+        navigation.renderingErrorPage = true;
+        this._currentRoute = null;
+        this._routeParameters = {};
+        try {
+            await awaitWithSignal(this._loadPath({
+                handler,
+                layout,
+                target: options.target ?? this._defaultTarget,
+                subLayouts: [],
+                title: options.title ?? null,
+                args: options.args ?? null,
+            }, navigation, null), navigation.controller.signal);
+        }
+        catch (error) {
+            if (!navigation.controller.signal.aborted)
+                throw error;
+        }
         finally {
-            this._inTransition = false;
+            navigation.renderingErrorPage = false;
+            navigation.elements.clear();
         }
     };
     route = async () => {
+        const navigation = this._beginNavigation();
         try {
+            navigation.controller.signal.throwIfAborted();
             let path = location.pathname;
             if (!path) {
                 path = this.indexRoute;
             }
             const matchedPath = this._matchRoute(path);
-            await this._authorizeRoute(matchedPath);
-            await this._loadPath(matchedPath);
+            await awaitWithSignal(this._authorizeRoute(matchedPath, navigation), navigation.controller.signal);
+            navigation.controller.signal.throwIfAborted();
+            this._routeParameters = matchedPath.parameters;
+            await awaitWithSignal(this._loadPath(matchedPath, navigation, matchedPath), navigation.controller.signal);
         }
         catch (error) {
+            if (navigation.controller.signal.aborted)
+                return;
+            if (error instanceof Error)
+                this._errorNavigations.set(error, navigation);
             await this.app.handleErrorOnce(error);
         }
+        finally {
+            navigation.elements.clear();
+        }
     };
-    _authorizeRoute = async (matchedPath) => {
+    _authorizeRoute = async (matchedPath, navigation) => {
         const requirements = matchedPath.authenticationChain.filter(requirement => requirement.authentication
             .authenticationRequired);
         if (requirements.length === 0) {
             return;
         }
-        if (!(await this.isAuthenticated())) {
+        const authenticated = await awaitWithSignal(Promise.resolve(this.isAuthenticated()), navigation.controller.signal);
+        navigation.controller.signal.throwIfAborted();
+        if (!authenticated) {
             throw new AuthenticationError(matchedPath.path);
         }
         for (const requirement of requirements) {
@@ -407,24 +473,29 @@ class Router {
             if (requiredRoles.length === 0) {
                 continue;
             }
-            const authorized = await this.checkUserRoles([
-                ...requiredRoles,
-            ]);
+            const authorized = await awaitWithSignal(Promise.resolve(this.checkUserRoles([...requiredRoles])), navigation.controller.signal);
+            navigation.controller.signal.throwIfAborted();
             if (!authorized) {
                 throw new AuthorizationError(matchedPath.path, [...requiredRoles]);
             }
         }
     };
-    _loadPath = async (matchedPath) => {
+    _loadPath = async (matchedPath, navigation, currentRoute) => {
+        const signal = navigation.controller.signal;
+        signal.throwIfAborted();
         this._emitRouteEvent(routeEventsEnum.START);
-        await this._renderLayout(matchedPath.layout);
+        signal.throwIfAborted();
+        await this._renderLayout(matchedPath.layout, navigation);
+        signal.throwIfAborted();
         const layout = Array.from(this.app.container.children).find(element => element instanceof
             matchedPath.layout);
         if (!layout) {
             throw new Error(`Failed to render layout '${matchedPath.layout.tagName}'.`);
         }
-        await layout.initComplete;
-        const pageRoot = await this._renderSubLayouts(layout, matchedPath.subLayouts);
+        await awaitWithSignal(layout.initComplete, signal);
+        signal.throwIfAborted();
+        const pageRoot = await this._renderSubLayouts(layout, matchedPath.subLayouts, navigation);
+        signal.throwIfAborted();
         const targetContainer = this._findLayoutTarget(pageRoot, matchedPath.target);
         if (!targetContainer) {
             throw new Error(`Failed to find route target '${matchedPath.target}'.`);
@@ -433,13 +504,20 @@ class Router {
         this.app.originalInnerHTML.call(targetContainer, matchedPath.handler.generate(hashId, matchedPath.args));
         const generatedHandler = this.app.querySelector(`[data-hash-id="${hashId}"]`);
         if (generatedHandler) {
-            await generatedHandler.initComplete;
+            this._trackNavigationElement(generatedHandler, navigation);
+            await awaitWithSignal(generatedHandler.initComplete, signal);
         }
-        await this._setTitle(matchedPath.handler.tagName.toLowerCase(), matchedPath.title);
-        this.currentRoute = matchedPath;
+        signal.throwIfAborted();
+        await this._setTitle(matchedPath.handler.tagName.toLowerCase(), matchedPath.title, navigation);
+        signal.throwIfAborted();
+        this.currentRoute = currentRoute;
+        navigation.elements.clear();
+        navigation.renderingErrorPage = false;
         this._emitRouteEvent(routeEventsEnum.FINISHED);
     };
-    async _renderSubLayouts(baseLayout, subLayouts) {
+    async _renderSubLayouts(baseLayout, subLayouts, navigation) {
+        const signal = navigation.controller.signal;
+        signal.throwIfAborted();
         let renderRoot = baseLayout;
         for (const [index, subLayout] of subLayouts.entries()) {
             const targetContainer = this._findLayoutTarget(renderRoot, subLayout.target);
@@ -460,8 +538,8 @@ class Router {
                 activeSubLayout.element.parentElement ===
                     targetContainer;
             if (canReuse) {
-                await activeSubLayout.element
-                    .initComplete;
+                await awaitWithSignal(activeSubLayout.element.initComplete, signal);
+                signal.throwIfAborted();
                 renderRoot =
                     activeSubLayout.element;
                 continue;
@@ -475,9 +553,11 @@ class Router {
                     `'${subLayout.layout.tagName}' in ` +
                     `'${subLayout.target}'.`);
             }
+            this._trackNavigationElement(subLayoutElement, navigation);
             subLayoutElement.setAttribute("data-jolt-router-layout", "");
             subLayoutElement.setAttribute("data-jolt-layout-depth", String(index));
-            await subLayoutElement.initComplete;
+            await awaitWithSignal(subLayoutElement.initComplete, signal);
+            signal.throwIfAborted();
             this._activeSubLayouts.push({
                 target: subLayout.target,
                 layout: subLayout.layout,
@@ -505,10 +585,13 @@ class Router {
         }
         return root.querySelector(selector);
     }
-    _renderLayout = async (layout) => {
+    _renderLayout = async (layout, navigation) => {
+        const signal = navigation.controller.signal;
+        signal.throwIfAborted();
         const existingLayout = Array.from(this.app.container.children).find(element => element instanceof layout);
         if (existingLayout) {
-            await existingLayout.initComplete;
+            await awaitWithSignal(existingLayout.initComplete, signal);
+            signal.throwIfAborted();
             return;
         }
         this.app.originalInnerHTML.call(this.app.container, layout.generate());
@@ -517,14 +600,26 @@ class Router {
         if (!layoutElement) {
             throw new Error(`Failed to generate layout '${layout.tagName}'.`);
         }
-        await layoutElement.initComplete;
+        this._trackNavigationElement(layoutElement, navigation);
+        await awaitWithSignal(layoutElement.initComplete, signal);
+        signal.throwIfAborted();
         this._emitRouteEvent(routeEventsEnum.LAYOUT_CHANGE_FINISHED);
     };
-    async _setTitle(tagName, title) {
-        const titleCandidate = await this.titleGenerator(tagName, title) || title;
+    async _setTitle(tagName, title, navigation) {
+        const signal = navigation.controller.signal;
+        signal.throwIfAborted();
+        const titleCandidate = await awaitWithSignal(Promise.resolve(this.titleGenerator(tagName, title)), signal) || title;
+        signal.throwIfAborted();
         if (titleCandidate) {
-            this.setTitle(titleCandidate);
+            await this.setTitle(titleCandidate);
         }
+    }
+    _trackNavigationElement(element, navigation) {
+        if (navigation.controller.signal.aborted) {
+            element.remove();
+            navigation.controller.signal.throwIfAborted();
+        }
+        navigation.elements.add(element);
     }
     async setTitle(title) {
         let titleElement = document.head.querySelector("title");
@@ -553,10 +648,7 @@ class Router {
                 if (type === "str") {
                     return "([^/]+)";
                 }
-                if (type === "int") {
-                    return "(\\d+)";
-                }
-                throw new UnsupportedRouteParameterType(type);
+                return "(\\d+)";
             });
             const match = normalizedPath.match(new RegExp(`^${regexPath}$`));
             if (!match) {
@@ -577,7 +669,6 @@ class Router {
                         ? Number.parseInt(capturedValue, 10)
                         : decodeURIComponent(capturedValue);
             }
-            this._routeParameters = parameters;
             return {
                 ...config,
                 path: normalizedPath,
@@ -585,7 +676,6 @@ class Router {
                 parameters,
             };
         }
-        this._routeParameters = {};
         throw new RouteNotFoundError(normalizedPath);
     }
     async redirect(path, options = {}) {

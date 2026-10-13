@@ -1,4 +1,5 @@
 import App, { dataEventEnum, } from "./app.js";
+import { replaceShorthandAttributes } from "./templateAttributes.js";
 import { awaitWithSignal, ElementDisconnectedError, isElementCancellation, } from "./cancellation.js";
 import doT, {} from "./dotjs/dot.js";
 import { Lifecycle, getLifecycleMethods, } from "./lifecycle.js";
@@ -6,8 +7,8 @@ import { requireElementMetadata, } from "./elementMetadata.js";
 import { AuthenticationError, AuthorizationError, HttpRequestError, InternalServerError, NetworkError, ServerComponentNotFound, ServerComponentBadRequestResponse, } from "./errors.js";
 export class RenderError extends Error {
     elementName;
-    constructor(elementName) {
-        super(`Failed to render element ${elementName}`);
+    constructor(elementName, options) {
+        super(`Failed to render element ${elementName}`, options);
         this.name = "RenderError";
         this.elementName = elementName;
     }
@@ -101,6 +102,7 @@ export class CustomElement extends HTMLElement {
     _lastRender = 0;
     _abort = false;
     _abortController = new AbortController();
+    _renderController = null;
     get abortSignal() {
         return this._abortController.signal;
     }
@@ -118,6 +120,7 @@ export class CustomElement extends HTMLElement {
         void this.initComplete.catch(() => undefined);
         this.abortSignal.addEventListener("abort", () => {
             this._abort = true;
+            this._renderController?.abort(this.abortSignal.reason);
             this._failInitialization(this.abortSignal.reason);
         }, { once: true });
     }
@@ -299,19 +302,19 @@ export class CustomElement extends HTMLElement {
             return;
         await this.app.handleErrorOnce(error);
     }
-    async _runLifecycle(stage) {
+    async _runLifecycle(stage, signal = this.abortSignal) {
         const disconnecting = stage === Lifecycle.AFTER_DISCONNECT;
         if (!disconnecting)
-            this.abortSignal.throwIfAborted();
+            signal.throwIfAborted();
         for (const { name, method } of getLifecycleMethods(this, stage)) {
             try {
                 if (disconnecting) {
                     await method.call(this);
                 }
                 else {
-                    this.abortSignal.throwIfAborted();
-                    await awaitWithSignal(Promise.resolve(method.call(this)), this.abortSignal);
-                    this.abortSignal.throwIfAborted();
+                    signal.throwIfAborted();
+                    await awaitWithSignal(Promise.resolve(method.call(this)), signal);
+                    signal.throwIfAborted();
                 }
             }
             catch (error) {
@@ -321,7 +324,7 @@ export class CustomElement extends HTMLElement {
             }
         }
         if (!disconnecting)
-            this.abortSignal.throwIfAborted();
+            signal.throwIfAborted();
     }
     async _markup() {
         try {
@@ -337,7 +340,7 @@ export class CustomElement extends HTMLElement {
                 MissingMarkupMethod) {
                 throw error;
             }
-            throw new RenderError(this.tagName);
+            throw new RenderError(this.tagName, { cause: error });
         }
     }
     templateCacheKey(request) {
@@ -423,12 +426,20 @@ export class CustomElement extends HTMLElement {
         this.abortSignal.throwIfAborted();
         this._hydrateElements(elements);
     }
-    render = async () => {
+    _beginRender() {
+        this.abortSignal.throwIfAborted();
+        const previous = this._renderController;
+        this._renderController = new AbortController();
+        previous?.abort();
+        this._abort = false;
+        return this._renderController.signal;
+    }
+    render = async (signal = this._beginRender()) => {
         try {
-            this.abortSignal.throwIfAborted();
+            signal.throwIfAborted();
             let renderedHtml;
             if (this.useServer) {
-                renderedHtml = await this._fetchHTML(this.abortSignal);
+                renderedHtml = await awaitWithSignal(this._fetchHTML(signal), signal);
             }
             else {
                 const renderTemplate = async () => {
@@ -447,17 +458,25 @@ export class CustomElement extends HTMLElement {
                     const cacheDuration = this.cacheDuration ??
                         this.app.templatesCacheDuration;
                     renderedHtml = cacheDuration > 0
-                        ? await awaitWithSignal(this.app.getOrSetCachedTemplate(cacheKey, cacheDuration, renderTemplate), this.abortSignal)
-                        : await awaitWithSignal(renderTemplate(), this.abortSignal);
+                        ? await awaitWithSignal(this.app.getOrSetCachedTemplate(cacheKey, cacheDuration, renderTemplate), signal)
+                        : await awaitWithSignal(renderTemplate(), signal);
                 }
                 else {
-                    renderedHtml = await awaitWithSignal(renderTemplate(), this.abortSignal);
+                    renderedHtml = await awaitWithSignal(renderTemplate(), signal);
                 }
             }
-            this.abortSignal.throwIfAborted();
+            signal.throwIfAborted();
+            this._templateSettings = {
+                ...this._templateSettings,
+                dataBinds: new Map(),
+            };
             this.innerHTML = renderedHtml;
         }
         catch (error) {
+            if (this.abortSignal.aborted)
+                throw this.abortSignal.reason;
+            if (signal.aborted)
+                return;
             this._abort = true;
             throw error;
         }
@@ -603,21 +622,25 @@ export class CustomElement extends HTMLElement {
         }
     };
     rerender = async () => {
+        const signal = this._beginRender();
         try {
-            this.abortSignal.throwIfAborted();
-            this._templateSettings.dataBinds.clear();
-            await this._runLifecycle(Lifecycle.BEFORE_RERENDER);
-            await this.render();
+            await this._runLifecycle(Lifecycle.BEFORE_RERENDER, signal);
+            signal.throwIfAborted();
+            await awaitWithSignal(this.render(signal), signal);
+            signal.throwIfAborted();
             if (this._abort) {
                 return;
             }
-            await this._waitForSubelements();
-            await this._runLifecycle(Lifecycle.AFTER_RERENDER);
+            await awaitWithSignal(this._waitForSubelements(), signal);
+            signal.throwIfAborted();
+            await this._runLifecycle(Lifecycle.AFTER_RERENDER, signal);
         }
         catch (error) {
-            this._abort = true;
             if (this.abortSignal.aborted)
                 throw this.abortSignal.reason;
+            if (signal.aborted)
+                return;
+            this._abort = true;
             await this._handleError(error);
             throw error;
         }
@@ -806,10 +829,10 @@ export class CustomElement extends HTMLElement {
         }
     };
     _replaceAtWithJolt(template) {
-        return template.replace(/@([a-z][a-z0-9]*(?:-[a-z0-9]+)*)=/g, "jolt-$1=");
+        return replaceShorthandAttributes(template, "@", "jolt-");
     }
     _replaceColonWithData(template) {
-        return template.replace(/:([a-z][a-z0-9]*(?:-[a-z0-9]+)*)=/g, "data-jolt-$1=");
+        return replaceShorthandAttributes(template, ":", "data-jolt-");
     }
     getData(field) {
         return this.app.getData(field);

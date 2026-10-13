@@ -291,6 +291,8 @@ class App<
     protected readonly _pendingTemplateCache:
         Map<string, Promise<string>> = new Map();
 
+    protected _templatesCacheGeneration = 0;
+
     protected _templatesCacheDefaultDuration: number = 300;
 
     protected _templatesCacheCleanupInterval: number = 60;
@@ -1747,18 +1749,23 @@ class App<
             return await pendingTemplate;
         }
 
+        const generation = this._templatesCacheGeneration;
         const templatePromise = Promise.resolve()
             .then(templateFactory)
             .then(template => {
-                this.setCachedTemplate(
-                    key,
-                    template,
-                    duration,
-                );
+                if (generation === this._templatesCacheGeneration) {
+                    this.setCachedTemplate(
+                        key,
+                        template,
+                        duration,
+                    );
+                }
                 return template;
             })
             .finally(() => {
-                this._pendingTemplateCache.delete(key);
+                if (this._pendingTemplateCache.get(key) === templatePromise) {
+                    this._pendingTemplateCache.delete(key);
+                }
             });
 
         this._pendingTemplateCache.set(
@@ -1771,6 +1778,12 @@ class App<
 
     removeCachedTemplate(key: string): boolean {
         return this._templatesCache.delete(key);
+    }
+
+    clearTemplatesCache(): void {
+        this._templatesCacheGeneration++;
+        this._templatesCache.clear();
+        this._pendingTemplateCache.clear();
     }
 
     cleanTemplatesCache = (): number => {

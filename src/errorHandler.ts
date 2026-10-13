@@ -84,6 +84,7 @@ export default class ErrorHandler<TApp extends App> {
             ErrorHandlerMethod
         >();
 
+        const seenNames = new Set<string>();
         let prototype: object | null = Object.getPrototypeOf(this);
 
         while (
@@ -92,9 +93,10 @@ export default class ErrorHandler<TApp extends App> {
             prototype !== Object.prototype
         ) {
             for (const propertyName of Object.getOwnPropertyNames(prototype)) {
-                if (propertyName === "constructor") {
+                if (propertyName === "constructor" || seenNames.has(propertyName)) {
                     continue;
                 }
+                seenNames.add(propertyName);
 
                 const descriptor = Object.getOwnPropertyDescriptor(
                     prototype,

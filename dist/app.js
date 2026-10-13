@@ -110,6 +110,7 @@ class App {
     _originalElQSA;
     _templatesCache;
     _pendingTemplateCache = new Map();
+    _templatesCacheGeneration = 0;
     _templatesCacheDefaultDuration = 300;
     _templatesCacheCleanupInterval = 60;
     _templatesCacheCleanupTimer = null;
@@ -750,20 +751,30 @@ class App {
         if (pendingTemplate) {
             return await pendingTemplate;
         }
+        const generation = this._templatesCacheGeneration;
         const templatePromise = Promise.resolve()
             .then(templateFactory)
             .then(template => {
-            this.setCachedTemplate(key, template, duration);
+            if (generation === this._templatesCacheGeneration) {
+                this.setCachedTemplate(key, template, duration);
+            }
             return template;
         })
             .finally(() => {
-            this._pendingTemplateCache.delete(key);
+            if (this._pendingTemplateCache.get(key) === templatePromise) {
+                this._pendingTemplateCache.delete(key);
+            }
         });
         this._pendingTemplateCache.set(key, templatePromise);
         return await templatePromise;
     }
     removeCachedTemplate(key) {
         return this._templatesCache.delete(key);
+    }
+    clearTemplatesCache() {
+        this._templatesCacheGeneration++;
+        this._templatesCache.clear();
+        this._pendingTemplateCache.clear();
     }
     cleanTemplatesCache = () => {
         const currentTime = Date.now();

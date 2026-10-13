@@ -1,4 +1,3 @@
-import App from "./app.js";
 import type { CustomElementClass } from "./customElement.js";
 import {
     setElementAuthenticationMetadata,

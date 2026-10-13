@@ -41,7 +41,6 @@ export type PageConfigs<
     target?: string | null;
     extras?: Record<string, unknown> | null;
     authentication?: AuthenticationMetadata | null;
-    roles?: readonly unknown[] | null;
 };
 
 type BaseElementMetadata = Readonly<{
@@ -80,7 +79,6 @@ export type PageMetadata<
         target: string | null;
         extras: Readonly<Record<string, unknown>>;
         authentication: AuthenticationMetadata | null;
-        roles: unknown[] | null;
     }>;
 
 export type ElementMetadata<
@@ -517,10 +515,6 @@ export function page<
                     ...(configs.extras ?? {}),
                 }),
                 authentication,
-                roles:
-                    configs.roles
-                        ? [...configs.roles]
-                        : null,
             },
         );
     };

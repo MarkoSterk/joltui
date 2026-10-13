@@ -25,7 +25,6 @@ export type PageConfigs<TApp extends App = App> = {
     target?: string | null;
     extras?: Record<string, unknown> | null;
     authentication?: AuthenticationMetadata | null;
-    roles?: readonly unknown[] | null;
 };
 type BaseElementMetadata = Readonly<{
     tagName: string;
@@ -51,7 +50,6 @@ export type PageMetadata<TApp extends App = App> = BaseElementMetadata & Readonl
     target: string | null;
     extras: Readonly<Record<string, unknown>>;
     authentication: AuthenticationMetadata | null;
-    roles: unknown[] | null;
 }>;
 export type ElementMetadata<TApp extends App = App> = ComponentMetadata | LayoutMetadata | PageMetadata<TApp>;
 type DecoratedElementClass<TApp extends App = App> = CustomElementClass<TApp, CustomElement<TApp>>;

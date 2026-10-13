@@ -317,6 +317,17 @@ Same-origin links are intercepted automatically. Add `router-ignore` when a link
 <a href="/server-page" router-ignore>Server page</a>
 ```
 
+When navigations overlap, the latest navigation takes precedence, including clicks,
+programmatic redirects, and Back/Forward. Superseded navigations stop waiting and
+cannot commit a page, title, or route state. Elements created by an unfinished
+navigation are removed, aborting their component lifetime signals. Existing layouts
+from a completed navigation remain reusable. Route parameters are published after
+authorization succeeds, before the new route's components initialize.
+
+Authentication and title hooks may still finish their own asynchronous work after
+navigation is superseded; the router ignores their late results. Application-owned
+side effects within those hooks must be managed by the application.
+
 A page can select a different layout or target:
 
 ```ts
@@ -470,6 +481,13 @@ Reconnecting the same disconnected instance is not supported. Create a new
 element instance instead. Ordinary DOM moves that invoke `disconnectedCallback`
 also end its lifetime, so do not detach and reinsert instances to preserve state.
 
+Overlapping `render()` and `rerender()` calls use the latest render. Superseded calls
+resolve quietly without committing late markup or continuing their lifecycle hooks.
+Existing bindings remain active until replacement markup is ready to commit.
+The component lifetime is unchanged, and shared cached requests can still complete.
+Hooks or markup factories already running may finish application-owned side effects;
+the framework only cancels its own waiting and subsequent work.
+
 ## Authentication and authorization
 
 Apply `@auth()` to pages or layouts to require authentication, or provide roles:
@@ -560,6 +578,37 @@ class Application extends App<Application> {
 ```
 
 Handlers are checked in registration order. If no handler accepts an error, the error is rethrown.
+
+Use `router.showErrorPage()` to display an ordinary `@component` without
+redirecting or registering an error route:
+
+```ts
+@handles(RouteNotFoundError)
+async routeNotFound(error: RouteNotFoundError): Promise<void> {
+    await this.app.router.showErrorPage(NotFoundPage, {
+        error,
+        title: "Page not found",
+    });
+}
+```
+
+The router preserves the URL and history, clears `currentRoute` and route
+parameters, removes active sublayouts, and renders through the normal component
+lifecycle. It uses the configured base layout and default target; pass `layout`
+and `target` to override them, or `args` to supply component arguments. Error
+pages do not run route authorization; choose a layout suitable for unauthenticated
+visitors. The normal route start, layout-change, and finish events still apply.
+
+Pass the intercepted `error` so a delayed handler for a router-reported failure
+cannot replace a newer navigation. Navigation also cancels pending error-page
+initialization and title generation. Error-page rendering failures reject the
+returned promise, and attempts to render another error page during initialization
+are rejected to prevent recursive error-page rendering.
+
+Handler discovery respects method overrides. A decorated subclass override replaces
+the base method's registration. An undecorated override suppresses that registration;
+it does not inherit `@handles`. Unrelated inherited handlers remain available.
+Two distinct effective methods cannot register the same error type.
 
 Component initialization failures reject the element's `initComplete`
 promise with an `ElementInitializationError`. Its `cause` contains the
@@ -741,7 +790,10 @@ const app = new Application({
 });
 ```
 
-The default key is deterministic and includes the component tag, route parameters, query parameters, component arguments, and application data. Concurrent requests for the same key share one in-flight operation.
+The default key is deterministic and includes the component tag, route parameters,
+query parameters, and component arguments. Server component keys also include the
+group name. Application data is not included, and `setData()` does not invalidate
+the cache. Concurrent requests for the same key share one in-flight operation.
 
 Override `templateCacheKey()` when additional context controls the rendered template:
 
@@ -752,7 +804,22 @@ override templateCacheKey(): string {
 }
 ```
 
-An override must always return a non-empty string. When writing a custom key, include every value that can change the resulting markup, such as the current user, locale, permissions, or component-local state.
+An override must always return a non-empty string. Include context that distinguishes
+cached variants, or explicitly clear the cache when that context changes.
+
+The application decides when to invalidate templates, such as on login, logout,
+account switching, permission changes, or relevant profile updates:
+
+```ts
+app.clearTemplatesCache();
+```
+
+This clears all stored templates, including custom cache keys, and stops new callers
+from sharing requests started before the clear. Those requests can still finish and
+deliver results to existing callers, but cannot repopulate the cache or interfere
+with newer pending requests. It does not abort network requests or component
+rendering. On an account change, also replace or navigate away from affected
+components to cancel their existing work through their lifetime signals.
 
 The cleanup interval is expressed in seconds and can be changed at runtime:
 

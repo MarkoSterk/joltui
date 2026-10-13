@@ -5,7 +5,7 @@ import { type ElementMetadata } from "./elementMetadata.js";
 import type { LazyDependency } from "./lazy.js";
 export declare class RenderError extends Error {
     protected readonly elementName: string;
-    constructor(elementName: string);
+    constructor(elementName: string, options?: ErrorOptions);
 }
 export declare class MissingMarkupMethod extends Error {
     protected readonly elementName: string;
@@ -100,6 +100,7 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _lastRender: number;
     protected _abort: boolean;
     protected readonly _abortController: AbortController;
+    protected _renderController: AbortController | null;
     get abortSignal(): AbortSignal;
     readonly initComplete: Promise<void>;
     rndId: number;
@@ -115,7 +116,7 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _throwIfInitializationAborted(): void;
     protected _loadDependencies(): Promise<void>;
     protected _handleError(error: unknown): Promise<void>;
-    protected _runLifecycle(stage: Lifecycle): Promise<void>;
+    protected _runLifecycle(stage: Lifecycle, signal?: AbortSignal): Promise<void>;
     protected _markup(): Promise<string>;
     templateCacheKey(request?: FetchHtmlRequest): string;
     protected _normalizePrerenderedAttributes(element: Element): void;
@@ -123,7 +124,8 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     protected _getOwnedElements(roots: readonly Element[]): Element[];
     protected _getPrerenderedOwnedElements(): Element[];
     protected _initializePrerenderedMarkup(): void;
-    render: () => Promise<void>;
+    protected _beginRender(): AbortSignal;
+    render: (signal?: AbortSignal) => Promise<void>;
     _fetchHTML: (signal?: AbortSignal | null) => Promise<string>;
     protected _createFetchHTMLRequest: () => FetchHtmlRequest;
     protected _resolveFetchHTMLRequest: (request: FetchHtmlRequest) => ResolvedFetchHtmlRequest;

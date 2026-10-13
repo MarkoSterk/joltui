@@ -85,6 +85,77 @@ function append(parent, child) {
     return child;
 }
 
+test("cache clearing removes every stored key and remains explicitly controlled", () => {
+    const app = new App({ appName: "Cache tests", dataStructure: { user: "Alice" } });
+    app._container = new EventTarget();
+    const key = app.getTemplateCacheKey("profile-card");
+    app.setCachedTemplate(key, "profile", 60);
+    app.setCachedTemplate("custom-key", "custom", 60);
+    app.setData("user", "Bob");
+    assert.equal(app.getTemplateCacheKey("profile-card"), key);
+    assert.equal(app.getCachedTemplate(key), "profile");
+    app.clearTemplatesCache();
+    assert.equal(app.getCachedTemplate(key), null);
+    assert.equal(app.getCachedTemplate("custom-key"), null);
+    app.clearTemplatesCache();
+    app.setCachedTemplate(key, "new profile", 60);
+    assert.equal(app.getCachedTemplate(key), "new profile");
+});
+
+test("clearing preserves existing callers' results without repopulating the cache", async () => {
+    const app = makeApp();
+    const gate = deferred();
+    const first = app.getOrSetCachedTemplate("shared", 60, () => gate.promise);
+    const second = app.getOrSetCachedTemplate("shared", 60, () => assert.fail("must share"));
+    await Promise.resolve();
+    app.clearTemplatesCache();
+    gate.resolve("old HTML");
+    assert.deepEqual(await Promise.all([first, second]), ["old HTML", "old HTML"]);
+    assert.equal(app.getCachedTemplate("shared"), null);
+});
+
+for (const fails of [false, true]) {
+    test(`obsolete ${fails ? "failed" : "successful"} request cannot remove a newer pending request`, async () => {
+        const app = makeApp();
+        const oldGate = deferred();
+        const newGate = deferred();
+        const older = app.getOrSetCachedTemplate("shared", 60, () => oldGate.promise);
+        const oldOutcome = fails ? assert.rejects(older, /old failure/) : older;
+        await Promise.resolve();
+        app.clearTemplatesCache();
+        let newCalls = 0;
+        const newer = app.getOrSetCachedTemplate("shared", 60, () => {
+            newCalls++;
+            return newGate.promise;
+        });
+        await Promise.resolve();
+        assert.equal(newCalls, 1);
+        if (fails) oldGate.reject(new Error("old failure"));
+        else oldGate.resolve("old HTML");
+        await oldOutcome;
+        assert.equal(app.getCachedTemplate("shared"), null);
+        const joined = app.getOrSetCachedTemplate("shared", 60, () => assert.fail("must share new request"));
+        newGate.resolve("new HTML");
+        assert.deepEqual(await Promise.all([newer, joined]), ["new HTML", "new HTML"]);
+        assert.equal(app.getCachedTemplate("shared"), "new HTML");
+    });
+}
+
+test("late requests from multiple clears cannot overwrite a fresh cached result", async () => {
+    const app = makeApp();
+    const firstGate = deferred();
+    const secondGate = deferred();
+    const first = app.getOrSetCachedTemplate("shared", 60, () => firstGate.promise);
+    app.clearTemplatesCache();
+    const second = app.getOrSetCachedTemplate("shared", 60, () => secondGate.promise);
+    app.clearTemplatesCache();
+    assert.equal(await app.getOrSetCachedTemplate("shared", 60, () => "fresh HTML"), "fresh HTML");
+    secondGate.resolve("second HTML");
+    firstGate.resolve("first HTML");
+    assert.deepEqual(await Promise.all([first, second]), ["first HTML", "second HTML"]);
+    assert.equal(app.getCachedTemplate("shared"), "fresh HTML");
+});
+
 for (const childFirst of [false, true]) {
     test(`inserted markup hydrates the correct owner (child initialized first: ${childFirst})`, () => {
         const parent = new TestElement();
@@ -613,4 +684,344 @@ test("bound refresh after disconnection is a synchronous no-op", () => {
     disconnect(element);
     element.querySelectorAll = () => assert.fail("Must not query detached markup");
     element._refreshBoundElements("attr.weight");
+});
+
+test("shorthand conversion changes attribute names while preserving SVG, values, and text", () => {
+    const element = new TestElement();
+    const input = `<svg xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="#icon" @click = "choose" :item-id='12' /></svg>
+<button title='literal @click="wrong" :value=other > text' data-note="@focus=wrong :id=wrong" data-url=/search?q=:id=1 @focus=focus :enabled>Text @click=wrong :value=wrong</button>`;
+    const expected = `<svg xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="#icon" jolt-click = "choose" data-jolt-item-id='12' /></svg>
+<button title='literal @click="wrong" :value=other > text' data-note="@focus=wrong :id=wrong" data-url=/search?q=:id=1 jolt-focus=focus data-jolt-enabled>Text @click=wrong :value=wrong</button>`;
+    assert.equal(element._parseStringTemplate(input), expected);
+    assert.equal(element._parseStringTemplate(expected), expected);
+});
+
+test("shorthand conversion preserves comments, CDATA, and raw text contents", () => {
+    const element = new TestElement();
+    const literal = `<button @click="literal" :value="literal">`;
+    const unchanged = `<!DOCTYPE html><!-- ${literal} --><![CDATA[${literal}]]>` +
+        ["script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes"]
+            .map(tag => `<${tag}>${literal}</${tag}>`).join("");
+    assert.equal(
+        element._parseStringTemplate(unchanged + `<button @click="real" :value="real"></button>`),
+        unchanged + `<button jolt-click="real" data-jolt-value="real"></button>`,
+    );
+    assert.equal(element._parseStringTemplate(`<SCRIPT>${literal}</SCRIPT><i :id="1">`), `<SCRIPT>${literal}</SCRIPT><i data-jolt-id="1">`);
+});
+
+test("shorthand attributes following quoted values convert without intervening whitespace", () => {
+    const element = new TestElement();
+    const input = `<fieldset class="mb-3 ":group="classification.science"><input type="checkbox"data-key="1"@change="handleChange"/><button title='literal @click="keep" :group=keep'@click="handleChange":item-id='1'>Change</button></fieldset>`;
+    const expected = `<fieldset class="mb-3 "data-jolt-group="classification.science"><input type="checkbox"data-key="1"jolt-change="handleChange"/><button title='literal @click="keep" :group=keep'jolt-click="handleChange"data-jolt-item-id='1'>Change</button></fieldset>`;
+    assert.equal(element._parseStringTemplate(input), expected);
+    assert.equal(element._parseStringTemplate(expected), expected);
+});
+
+test("server facet markup converts every repeated event and group attribute", () => {
+    const element = new TestElement();
+    for (const separator of [" ", "\n    ", ""]) {
+        const groups = ["classification.science", "rsr.type", "rsr.rsrttl", "rsr.sex", "bibgroup", "rsr.statadm"];
+        const input = `<aside aria-label="Filtri">` + groups.map(group =>
+            `<fieldset class="mb-3 "${separator}:group="${group}">` +
+            `<legend title="Veda" data-name="Veda">Veda</legend>` +
+            `<div class="form-check mb-0"><input class="form-check-input all-js" type="checkbox" value="all" checked id="facet-${group}-all" @change="handleChange" /></div>` +
+            ["1", "2", "ZZ"].map(value =>
+                `<div class="form-check mb-0 val-js"><input class="form-check-input" type="checkbox" value="${value}" id="facet-${group}-${value}" data-key="${value}"${separator}@change="handleChange" /><label data-key="${value}"><span class="f-name-js">Naravoslovje</span><span class="count"></span></label></div>`,
+            ).join("") + `</fieldset>`,
+        ).join("") + `</aside>`;
+        const output = element._parseStringTemplate(input);
+        assert.equal((output.match(/jolt-change="handleChange"/g) ?? []).length, 24);
+        assert.equal((output.match(/data-jolt-group=/g) ?? []).length, 6);
+        assert.ok(!output.includes("@change="));
+        assert.ok(!output.includes(":group="));
+    }
+});
+
+test("a stray quote on the transfer button does not prevent event conversion", () => {
+    const element = new TestElement();
+    for (const stray of ['"', ' "=""']) {
+        const input = `<div><input @change="selectAll" type="checkbox"><button @click="deleteChange" :id="-1">Delete</button><button @click="validateChanges" id="validateBtn">Validate</button><button class="btn btn-primary btn-sm mb-1" @click="transferChanges"${stray} id="transferBtn" title="Prenos">Transfer</button><button @click="afterTransfer">Next</button></div>`;
+        const expected = input.replaceAll("@change=", "jolt-change=")
+            .replaceAll("@click=", "jolt-click=").replaceAll(":id=", "data-jolt-id=");
+        assert.equal(element._parseStringTemplate(input), expected);
+    }
+});
+
+test("quotes in attribute names and unquoted values do not consume subsequent tags", () => {
+    const element = new TestElement();
+    const input = `<button data-label=can't @click="transferChanges">Transfer</button><input ' @change="handleChange"><svg><use xlink:href="#icon" /></svg><button title="literal > @click='keep' :id=keep" @click="next">Next</button>`;
+    const expected = `<button data-label=can't jolt-click="transferChanges">Transfer</button><input ' jolt-change="handleChange"><svg><use xlink:href="#icon" /></svg><button title="literal > @click='keep' :id=keep" jolt-click="next">Next</button>`;
+    assert.equal(element._parseStringTemplate(input), expected);
+});
+
+test("shorthand conversion preserves incomplete markup and does not consume later tags", () => {
+    const element = new TestElement();
+    assert.equal(element._parseStringTemplate(`2 < 3 <i\n@focus = 'go'\t:value = "a > b">`), `2 < 3 <i\njolt-focus = 'go'\tdata-jolt-value = "a > b">`);
+    for (const input of [`<!-- <i :id=1>`, `<script><i :id=1>`, `<i :id="unfinished`, `<plaintext><i :id=1>`]) {
+        assert.equal(element._parseStringTemplate(input), input);
+    }
+});
+
+test("decorated handler overrides replace base handlers and preserve unrelated inherited handlers", async () => {
+    class FirstError extends Error {}
+    class SecondError extends Error {}
+    const calls = [];
+    class Base extends ErrorHandler {
+        first() { calls.push("base"); }
+        second() { calls.push("second"); }
+    }
+    handles(FirstError)(Base.prototype.first, { name: "first" });
+    handles(SecondError)(Base.prototype.second, { name: "second" });
+    class Derived extends Base {
+        first() { calls.push("derived"); }
+    }
+    handles(FirstError)(Derived.prototype.first, { name: "first" });
+    class Leaf extends Derived {}
+    const handler = new Leaf(makeApp());
+    assert.equal(await handler.handle(new FirstError()), true);
+    assert.equal(await handler.handle(new SecondError()), true);
+    assert.deepEqual(calls, ["derived", "second"]);
+});
+
+test("undecorated method and accessor overrides suppress inherited handler metadata", async () => {
+    class Base extends ErrorHandler { handleFailure() { assert.fail("base handler was shadowed"); } }
+    handles(Error)(Base.prototype.handleFailure, { name: "handleFailure" });
+    class MethodOverride extends Base { handleFailure() { assert.fail("undecorated method is not a handler"); } }
+    class AccessorOverride extends Base { get handleFailure() { assert.fail("discovery must not invoke getters"); } }
+    assert.equal(await new MethodOverride(makeApp()).handle(new Error()), false);
+    assert.equal(await new AccessorOverride(makeApp()).handle(new Error()), false);
+});
+
+test("an override can change the handled error type without inheriting the old registration", async () => {
+    class FirstError extends Error {}
+    class SecondError extends Error {}
+    const calls = [];
+    class Base extends ErrorHandler { handleFailure() { assert.fail("base handler was shadowed"); } }
+    handles(FirstError)(Base.prototype.handleFailure, { name: "handleFailure" });
+    class Derived extends Base { handleFailure(error) { calls.push(error); } }
+    handles(SecondError)(Derived.prototype.handleFailure, { name: "handleFailure" });
+    const handler = new Derived(makeApp());
+    assert.equal(await handler.handle(new FirstError()), false);
+    const second = new SecondError();
+    assert.equal(await handler.handle(second), true);
+    assert.deepEqual(calls, [second]);
+});
+
+test("distinct effective methods still cannot register the same error type", () => {
+    class Base extends ErrorHandler { first() {} }
+    handles(Error)(Base.prototype.first, { name: "first" });
+    class Derived extends Base { second() {} }
+    handles(Error)(Derived.prototype.second, { name: "second" });
+    assert.throws(() => new Derived(makeApp()), /already registered/);
+});
+
+for (const asynchronous of [false, true]) {
+    test(`${asynchronous ? "asynchronous" : "synchronous"} markup failure preserves its cause for error handlers`, async () => {
+        class ServiceError extends Error {}
+        const original = new ServiceError("Service failed", { cause: new Error("Connection failed") });
+        const element = new TestElement();
+        element.markup = asynchronous
+            ? async () => { throw original; }
+            : () => { throw original; };
+        let renderedError;
+        await assert.rejects(element._markup(), error => {
+            assert.equal(error.name, "RenderError");
+            assert.equal(error.cause, original);
+            assert.equal(error.cause.stack, original.stack);
+            renderedError = error;
+            return true;
+        });
+        const handled = [];
+        class Handler extends ErrorHandler {
+            service(error) { handled.push(error); }
+        }
+        handles(ServiceError)(Handler.prototype.service, { name: "service" });
+        const handler = new Handler(makeApp());
+        const { ElementInitializationError } = await import("../dist/customElement.js");
+        assert.equal(await handler.handle(new ElementInitializationError(element, { cause: renderedError })), true);
+        assert.deepEqual(handled, [original]);
+    });
+}
+
+test("markup preserves non-Error causes and passes through cancellation and missing markup errors", async () => {
+    const element = new TestElement();
+    const reason = { message: "Application failure" };
+    element.markup = () => { throw reason; };
+    await assert.rejects(element._markup(), error => error.name === "RenderError" && error.cause === reason);
+    const cancellation = new ElementDisconnectedError(element.tagName);
+    element.markup = () => { throw cancellation; };
+    await assert.rejects(element._markup(), error => error === cancellation);
+    element.markup = null;
+    await assert.rejects(element._markup(), error => error.name === "MissingMarkupMethod");
+});
+
+function recordRenderCommits(element) {
+    const commits = [];
+    Object.defineProperty(element, "innerHTML", {
+        get: () => commits.at(-1) ?? "",
+        set: html => {
+            commits.push(html);
+            element._templateSettings.dataBinds.set(html, { id: html });
+        },
+    });
+    return commits;
+}
+
+for (const firstMethod of ["render", "rerender"]) {
+    for (const secondMethod of ["render", "rerender"]) {
+        test(`${secondMethod} supersedes pending ${firstMethod} without stale HTML or binding changes`, async () => {
+            const element = new TestElement();
+            element._app = makeApp();
+            element.server = false;
+            const commits = recordRenderCommits(element);
+            const oldMarkup = deferred();
+            const started = deferred();
+            element._templateSettings.dataBinds.set("existing", { id: "existing" });
+            element.markup = () => { started.resolve(); return oldMarkup.promise; };
+            const older = element[firstMethod]();
+            await started.promise;
+            assert.ok(element._templateSettings.dataBinds.has("existing"));
+            element.markup = () => "new HTML";
+            await element[secondMethod]();
+            await older;
+            const currentBindings = element._templateSettings.dataBinds;
+            oldMarkup.resolve("old HTML");
+            await new Promise(resolve => setImmediate(resolve));
+            assert.deepEqual(commits, ["new HTML"]);
+            assert.equal(element._templateSettings.dataBinds, currentBindings);
+            assert.deepEqual([...currentBindings.keys()], ["new HTML"]);
+            assert.equal(element.abortSignal.aborted, false);
+            assert.equal(element.app.errors, 0);
+        });
+    }
+}
+
+test("late markup failures from an obsolete render do not report errors or poison later renders", async () => {
+    const element = new TestElement();
+    element._app = makeApp();
+    element.server = false;
+    const oldMarkup = deferred();
+    const started = deferred();
+    element.markup = () => { started.resolve(); return oldMarkup.promise; };
+    const older = element.rerender();
+    await started.promise;
+    element.markup = () => "new HTML";
+    await element.rerender();
+    await older;
+    oldMarkup.reject(new Error("obsolete failure"));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(element.app.errors, 0);
+    assert.equal(element._abort, false);
+    element.markup = () => "next HTML";
+    await element.rerender();
+    assert.equal(element.innerHTML, "next HTML");
+});
+
+for (const stage of [Lifecycle.BEFORE_RERENDER, Lifecycle.AFTER_RERENDER]) {
+    test(`supersession during ${stage} skips remaining obsolete hooks`, async () => {
+        const entered = deferred();
+        const gate = deferred();
+        class HookElement extends TestElement {
+            calls = 0;
+            tails = 0;
+            first() {
+                if (++this.calls === 1) { entered.resolve(); return gate.promise; }
+            }
+            tail() { this.tails++; }
+        }
+        lifecycle(stage)(HookElement.prototype.first, { name: "first" });
+        lifecycle(stage)(HookElement.prototype.tail, { name: "tail" });
+        const element = new HookElement();
+        element._app = makeApp();
+        element.server = false;
+        element.markup = () => "first HTML";
+        const older = element.rerender();
+        await entered.promise;
+        element.markup = () => "new HTML";
+        await element.rerender();
+        await older;
+        gate.resolve();
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(element.innerHTML, "new HTML");
+        assert.equal(element.tails, 1);
+        assert.equal(element.app.errors, 0);
+    });
+}
+
+test("supersession while waiting for descendants skips obsolete completion hooks", async () => {
+    const entered = deferred();
+    const child = deferred();
+    class Parent extends TestElement {
+        completions = 0;
+        after() { this.completions++; }
+    }
+    lifecycle(Lifecycle.AFTER_RERENDER)(Parent.prototype.after, { name: "after" });
+    const element = new Parent();
+    element._app = makeApp();
+    element.server = false;
+    element.markup = () => "first HTML";
+    element._waitForSubelements = () => { entered.resolve(); return child.promise; };
+    const older = element.rerender();
+    await entered.promise;
+    element._waitForSubelements = async () => {};
+    element.markup = () => "new HTML";
+    await element.rerender();
+    await older;
+    child.resolve();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(element.completions, 1);
+    assert.equal(element.innerHTML, "new HTML");
+});
+
+test("superseding a render leaves its shared cached request available to the latest render", async t => {
+    const started = deferred();
+    const response = deferred();
+    let requests = 0;
+    t.mock.method(globalThis, "fetch", async (_url, options) => {
+        requests++;
+        assert.equal(options.signal, null);
+        started.resolve();
+        return response.promise;
+    });
+    const element = new TestElement();
+    element._app = makeApp();
+    element.cached = true;
+    const commits = recordRenderCommits(element);
+    const older = element.rerender();
+    await started.promise;
+    const newer = element.rerender();
+    await older;
+    response.resolve(new Response("shared HTML"));
+    await newer;
+    assert.equal(requests, 1);
+    assert.deepEqual(commits, ["shared HTML"]);
+    assert.equal(element.app.getCachedTemplate("shared"), "shared HTML");
+    assert.equal(element.abortSignal.aborted, false);
+});
+
+test("rapid app data events only commit the latest rerender", async () => {
+    const app = new App({ appName: "Render tests", dataStructure: { profile: "old" } });
+    app._container = new EventTarget();
+    const element = new TestElement();
+    element._app = app;
+    element.server = false;
+    Object.defineProperty(element, "dataField", { value: "profile" });
+    element.hashId = "profile";
+    const commits = recordRenderCommits(element);
+    const first = deferred();
+    const started = deferred();
+    element.markup = () => {
+        const value = app.getData("profile");
+        if (value === "old") { started.resolve(); return first.promise; }
+        return value;
+    };
+    app.registerDataListener(element);
+    app.setData("profile", "old");
+    await started.promise;
+    app.setData("profile", "new");
+    await new Promise(resolve => setImmediate(resolve));
+    first.resolve("old");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(commits, ["new"]);
+    app.removeDataListener(element);
 });

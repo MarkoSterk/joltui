@@ -63,6 +63,7 @@ declare class App<TApp extends App<TApp> = any> {
     protected readonly _originalElQSA: typeof Element.prototype.querySelectorAll;
     protected readonly _templatesCache: Map<string, TemplatesCacheEntry>;
     protected readonly _pendingTemplateCache: Map<string, Promise<string>>;
+    protected _templatesCacheGeneration: number;
     protected _templatesCacheDefaultDuration: number;
     protected _templatesCacheCleanupInterval: number;
     protected _templatesCacheCleanupTimer: ReturnType<typeof globalThis.setInterval> | null;
@@ -122,6 +123,7 @@ declare class App<TApp extends App<TApp> = any> {
     getCachedTemplate(key: string): string | null;
     getOrSetCachedTemplate(key: string, duration: number, templateFactory: () => string | Promise<string>): Promise<string>;
     removeCachedTemplate(key: string): boolean;
+    clearTemplatesCache(): void;
     cleanTemplatesCache: () => number;
     protected _startTemplatesCacheCleanup(): void;
     get hash(): string;

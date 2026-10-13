@@ -5,8 +5,6 @@ export declare const routeEventsEnum: {
     readonly START: "route-change.start";
     readonly FINISHED: "route-change.finished";
     readonly LAYOUT_CHANGE_FINISHED: "route-change.layout-change.finished";
-    readonly ERROR_PAGE_START: "route-change.error-page.start";
-    readonly ERROR_PAGE_FINISHED: "route-change.error-page.finished";
 };
 export declare class RouteFailedError extends Error {
     constructor(options?: ErrorOptions);
@@ -45,7 +43,6 @@ export type Route<TApp extends App = App> = {
     extras: RouteExtras;
     authentication: Authentication | null;
     authenticationChain: readonly RouteAuthenticationRequirement<TApp>[];
-    roles: unknown[] | null;
 };
 export type ParsedRoute<TApp extends App = App> = {
     handler: CustomElementClass<TApp>;
@@ -57,7 +54,6 @@ export type ParsedRoute<TApp extends App = App> = {
     authentication: Authentication | null;
     authenticationChain: readonly RouteAuthenticationRequirement<TApp>[];
     args: HandlerArgs | null;
-    roles: unknown[] | null;
     route: string;
 };
 export type MatchedRoute<TApp extends App = App> = ParsedRoute<TApp> & {
@@ -77,6 +73,13 @@ export type RedirectOptions = {
     useBaseUrl?: boolean;
     baseParameters?: RouteParameters;
 };
+export type ErrorPageOptions<TApp extends App = App> = {
+    layout?: CustomElementClass<TApp>;
+    target?: string;
+    title?: string | null;
+    args?: HandlerArgs | null;
+    error?: Error;
+};
 type RouteSpecificity = {
     segments: readonly number[];
     literalCount: number;
@@ -89,6 +92,11 @@ type ScrollPosition = {
 };
 type CurrentState = {
     scrollPosition: ScrollPosition;
+};
+type Navigation = {
+    controller: AbortController;
+    elements: Set<CustomElement>;
+    renderingErrorPage?: boolean;
 };
 type ActiveSubLayout<TApp extends App = App> = {
     target: string;
@@ -107,12 +115,13 @@ declare class Router<TApp extends App> {
     protected readonly _routesMap: Map<string, ParsedRoute<TApp>>;
     protected _currentRoute: MatchedRoute<TApp> | null;
     protected _routeParameters: RouteParameters;
-    protected _inTransition: boolean;
+    protected _navigation: Navigation | null;
+    protected readonly _errorNavigations: WeakMap<Error, Navigation>;
     protected _activeSubLayouts: ActiveSubLayout<TApp>[];
     constructor({ baseUrl, baseLayout, defaultTarget, indexRoute, app, pages, }: RouterConfig<TApp>);
     isAuthenticated(): MaybePromise<boolean>;
     checkUserRoles(_roles: unknown[]): MaybePromise<boolean>;
-    titleGenerator(tagName: string, title: string | null): MaybePromise<string>;
+    titleGenerator(_tagName: string, _title: string | null): MaybePromise<string>;
     protected _discoverRoutes(): Route<TApp>[];
     protected _createRouteFromMetadata(handler: CustomElementClass<TApp>, metadata: PageMetadata<TApp>): Route<TApp>;
     protected _createAuthenticationChain(handler: CustomElementClass<TApp>, pageMetadata: PageMetadata<TApp>, layout: CustomElementClass<TApp>, layoutMetadata: LayoutMetadata): readonly RouteAuthenticationRequirement<TApp>[];
@@ -124,14 +133,17 @@ declare class Router<TApp extends App> {
     protected _getRouteSpecificity(path: string): RouteSpecificity;
     protected _popStateHandler: (event: PopStateEvent) => Promise<void>;
     protected _clickHandler: (event: MouseEvent) => Promise<void>;
+    protected _beginNavigation(): Navigation;
+    showErrorPage: (handler: CustomElementClass<TApp>, options?: ErrorPageOptions<TApp>) => Promise<void>;
     route: () => Promise<void>;
-    protected _authorizeRoute: (matchedPath: MatchedRoute<TApp>) => Promise<void>;
-    protected _loadPath: (matchedPath: MatchedRoute<TApp>) => Promise<void>;
-    protected _renderSubLayouts(baseLayout: CustomElement<TApp>, subLayouts: readonly SubLayoutConfig<TApp>[]): Promise<CustomElement<TApp>>;
+    protected _authorizeRoute: (matchedPath: MatchedRoute<TApp>, navigation: Navigation) => Promise<void>;
+    protected _loadPath: (matchedPath: Pick<ParsedRoute<TApp>, "handler" | "layout" | "target" | "subLayouts" | "title" | "args">, navigation: Navigation, currentRoute: MatchedRoute<TApp> | null) => Promise<void>;
+    protected _renderSubLayouts(baseLayout: CustomElement<TApp>, subLayouts: readonly SubLayoutConfig<TApp>[], navigation: Navigation): Promise<CustomElement<TApp>>;
     protected _clearSubLayoutsFrom(index: number): void;
     protected _findLayoutTarget(root: CustomElement<TApp>, selector: string): Element | null;
-    protected _renderLayout: (layout: CustomElementClass<TApp>) => Promise<void>;
-    protected _setTitle(tagName: string, title: string | null): Promise<void>;
+    protected _renderLayout: (layout: CustomElementClass<TApp>, navigation: Navigation) => Promise<void>;
+    protected _setTitle(tagName: string, title: string | null, navigation: Navigation): Promise<void>;
+    protected _trackNavigationElement(element: CustomElement, navigation: Navigation): void;
     setTitle(title: string): Promise<void>;
     protected _emitRouteEvent(eventType: string): void;
     protected _matchRoute(path: string): MatchedRoute<TApp>;

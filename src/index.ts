@@ -77,6 +77,7 @@ export type {
     MatchedRoute,
     RouterConfig,
     RedirectOptions,
+    ErrorPageOptions,
     HandlerArgs,
 } from "./router.js";
 

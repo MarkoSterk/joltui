@@ -23,6 +23,7 @@
     "prepare": "husky",
     "typecheck": "tsc --noEmit",
     "test:cancellation": "npm run build && node --test tests/cancellation.test.mjs",
+    "test:router": "npm run build && node --test tests/router.test.mjs",
     "dev": "vite --config dev/vite.config.ts",
     "dev:build": "vite build --config dev/vite.config.ts",
     "dev:preview": "vite preview --config dev/vite.config.ts"

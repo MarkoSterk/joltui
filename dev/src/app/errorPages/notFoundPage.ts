@@ -2,14 +2,9 @@ import {
     CustomElement,
     component,
     html,
-    page,
 } from "joltui";
 import type FieldnotesApp from "../app.js";
 
-@page({
-    path: "/404",
-    title: "ecris.frontend.pages.notFound",
-})
 @component({ tagName: "not-found-page" })
 export default class NotFoundPage
     extends CustomElement<FieldnotesApp> {

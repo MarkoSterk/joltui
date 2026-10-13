@@ -1,4 +1,3 @@
-import App from "./app.js";
 import { setElementAuthenticationMetadata, } from "./elementMetadata.js";
 export function auth(roles = []) {
     if (!Array.isArray(roles)) {

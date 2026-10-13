@@ -26,14 +26,16 @@ export default class ErrorHandler {
     }
     _generateHandlerMethodsMapping() {
         const handlers = new Map();
+        const seenNames = new Set();
         let prototype = Object.getPrototypeOf(this);
         while (prototype &&
             prototype !== ErrorHandler.prototype &&
             prototype !== Object.prototype) {
             for (const propertyName of Object.getOwnPropertyNames(prototype)) {
-                if (propertyName === "constructor") {
+                if (propertyName === "constructor" || seenNames.has(propertyName)) {
                     continue;
                 }
+                seenNames.add(propertyName);
                 const descriptor = Object.getOwnPropertyDescriptor(prototype, propertyName);
                 const method = descriptor?.value;
                 if (typeof method !== "function") {

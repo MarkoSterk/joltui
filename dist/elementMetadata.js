@@ -190,9 +190,6 @@ export function page(pathOrConfigs) {
                 ...(configs.extras ?? {}),
             }),
             authentication,
-            roles: configs.roles
-                ? [...configs.roles]
-                : null,
         });
     };
 }

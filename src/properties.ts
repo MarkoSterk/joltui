@@ -60,23 +60,6 @@ type AccessorResult<
     TValue
 >;
 
-type AccessorDecorator<
-    THost,
-    TValue,
-> = (
-    target: AccessorTarget<
-        THost,
-        TValue
-    >,
-    context: AccessorContext<
-        THost,
-        TValue
-    >,
-) => AccessorResult<
-    THost,
-    TValue
->;
-
 function assertAccessor(
     context: ClassAccessorDecoratorContext,
     decoratorName: string,
