@@ -1,6 +1,13 @@
 {
-  "name": "joltui",
-  "version": "1.0.0",
+  "name": "@pro/joltui",
+  "publishConfig": {
+    "registry": "https://gitea.izum.pri/api/packages/pro/npm/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://gitea.izum.pri/pro/joltui.git"
+  },
+  "version": "0.9.0",
   "description": "TypeScript SPA framework",
   "license": "ISC",
   "author": "Marko Šterk <marko_sterk@hotmail.com>",
@@ -26,7 +33,8 @@
     "test:router": "npm run build && node --test tests/router.test.mjs",
     "dev": "vite --config dev/vite.config.ts",
     "dev:build": "vite build --config dev/vite.config.ts",
-    "dev:preview": "vite preview --config dev/vite.config.ts"
+    "dev:preview": "vite preview --config dev/vite.config.ts",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@lit-labs/rollup-plugin-minify-html-literals": "^0.2.0",
