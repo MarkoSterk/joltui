@@ -1025,3 +1025,87 @@ test("rapid app data events only commit the latest rerender", async () => {
     assert.deepEqual(commits, ["new"]);
     app.removeDataListener(element);
 });
+
+function validationErrorType() {
+    const marker = Symbol("validationError");
+    class InternalError extends Error {
+        [marker] = true;
+    }
+    function ValidationError(message) { return new InternalError(message); }
+    Object.defineProperty(ValidationError, Symbol.hasInstance, {
+        value: error => Boolean(error?.[marker]),
+    });
+    return ValidationError;
+}
+
+test("instanceof fallback recognizes factory errors through nested causes", async () => {
+    const ValidationError = validationErrorType();
+    class Handler extends ErrorHandler {
+        handled = [];
+        validation(error) { this.handled.push(error); }
+    }
+    handles(ValidationError)(Handler.prototype.validation, { name: "validation" });
+    const handler = new Handler(makeApp());
+    const error = new ValidationError("Invalid value");
+    assert.notEqual(error.constructor, ValidationError);
+    assert.ok(error instanceof ValidationError);
+    assert.equal(await handler.handle(new Error("Unrelated")), false);
+    assert.equal(await handler.handle(new Error("Outer", {
+        cause: new Error("Inner", { cause: error }),
+    })), true);
+    assert.deepEqual(handler.handled, [error]);
+});
+
+for (const inherited of [false, true]) {
+    test(`constructor matches precede instanceof fallback (inherited: ${inherited})`, async () => {
+        class ParentError extends Error {}
+        class ChildError extends ParentError {}
+        class Fallback {
+            static [Symbol.hasInstance]() { assert.fail("Fallback must not run"); }
+        }
+        class Handler extends ErrorHandler {
+            fallback() { assert.fail("Fallback must not win"); }
+            exact(error) { this.handled = error; }
+        }
+        handles(Fallback)(Handler.prototype.fallback, { name: "fallback" });
+        handles(inherited ? ParentError : ChildError)(Handler.prototype.exact, { name: "exact" });
+        const handler = new Handler(makeApp());
+        const error = new ChildError();
+        assert.equal(await handler.handle(error), true);
+        assert.equal(handler.handled, error);
+    });
+}
+
+test("fallback uses discovery order and precedes cause traversal", async () => {
+    const ValidationError = validationErrorType();
+    class CauseError extends Error {}
+    class OtherValidation {
+        static [Symbol.hasInstance](error) { return error instanceof ValidationError; }
+    }
+    class Handler extends ErrorHandler {
+        first(error) { this.handled = error; }
+        second() { assert.fail("Only the first fallback should run"); }
+        cause() { assert.fail("A matching outer error takes precedence"); }
+    }
+    handles(ValidationError)(Handler.prototype.first, { name: "first" });
+    handles(OtherValidation)(Handler.prototype.second, { name: "second" });
+    handles(CauseError)(Handler.prototype.cause, { name: "cause" });
+    const handler = new Handler(makeApp());
+    const error = new ValidationError("Invalid value");
+    error.cause = new CauseError();
+    assert.equal(await handler.handle(error), true);
+    assert.equal(handler.handled, error);
+});
+
+test("fallback awaits handlers and propagates their failures", async () => {
+    const ValidationError = validationErrorType();
+    const failure = new Error("Handler failed");
+    class Handler extends ErrorHandler {
+        async validation() {
+            await Promise.resolve();
+            throw failure;
+        }
+    }
+    handles(ValidationError)(Handler.prototype.validation, { name: "validation" });
+    await assert.rejects(new Handler(makeApp()).handle(new ValidationError()), error => error === failure);
+});

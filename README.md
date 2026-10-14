@@ -579,6 +579,13 @@ class Application extends App<Application> {
 
 Handlers are checked in registration order. If no handler accepts an error, the error is rethrown.
 
+For each error, constructor and constructor-inheritance matches take priority.
+If none matches, registered types are checked with `instanceof`, including custom
+`Symbol.hasInstance` implementations, before proceeding to the error's cause.
+The first matching fallback wins in discovery order: subclass methods before base
+methods, declaration order within each class, and argument order within `@handles`.
+Use `@handles(ZodError)` for Zod validation errors; JoltUI does not require a Zod dependency.
+
 Use `router.showErrorPage()` to display an ordinary `@component` without
 redirecting or registering an error route:
 

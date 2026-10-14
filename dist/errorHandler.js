@@ -70,6 +70,12 @@ export default class ErrorHandler {
                 }
                 errorType = Object.getPrototypeOf(errorType);
             }
+            for (const [handledType, handler] of this._handlerMethods) {
+                if (currentError instanceof handledType) {
+                    await handler(currentError);
+                    return true;
+                }
+            }
             currentError =
                 currentError.cause instanceof Error
                     ? currentError.cause
