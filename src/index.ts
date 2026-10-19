@@ -140,6 +140,8 @@ export {
     JsonResponseError,
     InternalServerError,
     ServerComponentNotFound,
+    ServerComponentBadRequestResponse,
+    MarkupFetchError,
     DependencyLoadError,
     ElementInitializationError,
 } from "./errors.js";
