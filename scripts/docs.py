@@ -111,11 +111,21 @@ def sync_docs_branch(remote):
     if code != 0:
         return
     code, _ = git("fetch", "--quiet", remote, f"{BRANCH}:{BRANCH}")
-    if code != 0:
-        print(
-            f"! Could not fast-forward the local {BRANCH} branch to {remote}/{BRANCH}; "
-            "it has local commits (for example from --no-push)."
+    if code == 0:
+        return
+    git("fetch", "--quiet", remote, BRANCH)
+    has_local, _ = git("rev-parse", "--verify", "--quiet", f"refs/heads/{BRANCH}")
+    related, _ = git("merge-base", BRANCH, f"{remote}/{BRANCH}")
+    if has_local == 0 and related != 0:
+        raise DocsError(
+            f"The local {BRANCH} branch is unrelated to {remote}/{BRANCH} (it was probably "
+            f"created by a deploy that never reached {remote}). Replace it with the remote "
+            f"branch and run again: git branch -f {BRANCH} {remote}/{BRANCH}"
         )
+    print(
+        f"! Could not fast-forward the local {BRANCH} branch to {remote}/{BRANCH}; "
+        "it has local commits (for example from --no-push)."
+    )
 
 
 def deployed_versions(remote):
