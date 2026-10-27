@@ -3,3 +3,7 @@ node_modules/
 .agents/
 *.tgz
 .env
+# Zensical documentation build
+site/
+.cache/
+__pycache__/

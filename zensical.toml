@@ -1,0 +1,171 @@
+# Zensical configuration for the JoltUI documentation.
+#
+#   Preview:  uvx zensical serve           (http://localhost:8000)
+#   Build:    uvx zensical build --clean   (output in site/)
+#
+# Or use the wrappers in scripts/ (./scripts/docs.sh serve, .\scripts\docs.ps1 serve).
+# See docs/project/documentation.md for the versioned publishing workflow.
+
+[project]
+site_name = "JoltUI"
+site_description = "A TypeScript framework for single-page applications built from browser-native Web Components."
+site_author = "Marko Šterk"
+site_url = "https://joltui.markosterk.com/"
+repo_url = "https://github.com/MarkoSterk/joltui"
+repo_name = "MarkoSterk/joltui"
+edit_uri = "edit/main/docs/"
+copyright = "Copyright &copy; Marko Šterk. Released under the ISC License."
+docs_dir = "docs"
+site_dir = "site"
+extra_css = ["assets/stylesheets/extra.css"]
+
+nav = [
+  { "Home" = "index.md" },
+  { "Getting started" = [
+    "getting-started/index.md",
+    "getting-started/installation.md",
+    "getting-started/quickstart.md",
+    "getting-started/project-layout.md",
+    "getting-started/first-component.md",
+  ] },
+  { "Guide" = [
+    "guide/index.md",
+    "guide/architecture.md",
+    { "Building blocks" = [
+      "guide/application.md",
+      "guide/components.md",
+      "guide/templates.md",
+      "guide/reactivity.md",
+      "guide/communication.md",
+      "guide/lifecycle.md",
+    ] },
+    { "Routing" = [
+      "guide/routing.md",
+      "guide/layouts.md",
+      "guide/authentication.md",
+    ] },
+    { "Robustness" = [
+      "guide/error-handling.md",
+      "guide/cancellation.md",
+    ] },
+    { "Performance" = [
+      "guide/lazy-dependencies.md",
+      "guide/server-components.md",
+      "guide/template-caching.md",
+    ] },
+    { "Tooling" = [
+      "guide/vite-plugin.md",
+      "guide/without-a-router.md",
+    ] },
+  ] },
+  { "Deployment" = "deployment.md" },
+  { "Reference" = [
+    "reference/index.md",
+    "reference/configuration.md",
+    "reference/decorators.md",
+    "reference/app.md",
+    "reference/custom-element.md",
+    "reference/router.md",
+    "reference/template-syntax.md",
+    "reference/events-and-attributes.md",
+    "reference/errors.md",
+    "reference/exports.md",
+  ] },
+  { "Project" = [
+    "project/versioning.md",
+    "project/contributing.md",
+    "project/documentation.md",
+    "project/license.md",
+  ] },
+]
+
+[project.extra]
+# Version selector. Filled by mike when versions are deployed
+# (see docs/project/documentation.md).
+version.provider = "mike"
+version.default = "latest"
+version.alias = true
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/MarkoSterk/joltui"
+
+[project.theme]
+language = "en"
+logo = "assets/joltui-logo.svg"
+favicon = "assets/joltui-logo.png"
+features = [
+  "announce.dismiss",
+  "content.action.edit",
+  "content.action.view",
+  "content.code.annotate",
+  "content.code.copy",
+  "content.code.select",
+  "content.footnote.tooltips",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.instant.prefetch",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "toc.follow",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "indigo"
+accent = "amber"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "indigo"
+accent = "amber"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.betterem = {}
+pymdownx.caret = {}
+pymdownx.details = {}
+pymdownx.emoji.emoji_generator = "zensical.extensions.emoji.to_svg"
+pymdownx.emoji.emoji_index = "zensical.extensions.emoji.twemoji"
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.magiclink = {}
+pymdownx.mark = {}
+pymdownx.smartsymbols = {}
+pymdownx.snippets.base_path = ["."]
+pymdownx.snippets.check_paths = true
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tabbed.combine_header_slug = true
+pymdownx.tasklist.custom_checkbox = true
+pymdownx.tilde = {}
