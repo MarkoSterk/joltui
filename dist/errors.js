@@ -1,4 +1,4 @@
-import { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, ElementInitializationError } from "./customElement.js";
+import { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, ElementInitializationError, MarkupFetchError } from "./customElement.js";
 import { AuthenticationError, AuthorizationError } from "./auth.js";
 import { NotImplementedError } from "./utilities.js";
 import { RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType } from "./router.js";
@@ -63,5 +63,5 @@ class ServerComponentBadRequestResponse extends Error {
         this.name = "ServerComponentBadRequestResponse";
     }
 }
-export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound, ServerComponentBadRequestResponse, DependencyLoadError, ElementInitializationError, };
+export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound, ServerComponentBadRequestResponse, MarkupFetchError, DependencyLoadError, ElementInitializationError, };
 //# sourceMappingURL=errors.js.map

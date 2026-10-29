@@ -16,10 +16,19 @@ when the package is published as `joltui` on your configured registry.
 
 ## Create an application
 
-`init` asks for an application name (default `my-joltui-app`), whether to include
+Run `init` in your application root, including after `npm init` and installing JoltUI.
+It scaffolds the **current directory**, without creating a nested project.
+
+`init` asks for an application name (defaulting to the existing package name or directory name), whether to include
 Vite (yes), whether to include the JoltUI Vite plugin (yes when Vite is selected),
-and whether to install dependencies immediately (yes). It creates a new directory
-with that name and refuses to overwrite any existing directory.
+and whether to install dependencies immediately (yes). The app name is used for
+application metadata, never as an output directory.
+
+Existing package metadata, scripts, and dependency versions are preserved; missing
+scripts and dependencies are added to the same `package.json`. Installation runs
+in that directory and reuses its `node_modules` and lockfile. Existing README and
+ignore files are preserved. Conflicting source or configuration files stop initialization
+before any files are changed. In an empty directory, `init` creates `package.json`.
 
 The starter includes TypeScript configuration, an HTML entry, an application,
 router, layout, reactive counter page, stylesheet, and npm scripts. Without the
@@ -36,7 +45,8 @@ npx joltui init my-app --yes --no-vite
 `--yes` accepts defaults and is required without an interactive terminal.
 `--no-install` writes files without running npm. Install failures retain the
 generated files so you can correct registry settings and rerun `npm install`.
-Scoped releases generate npm aliases to their scoped framework and plugin packages.
+Existing scoped framework dependencies are reused directly. When adding dependencies,
+scoped releases generate npm aliases to their scoped framework and plugin packages.
 
 ## Coding agents
 
