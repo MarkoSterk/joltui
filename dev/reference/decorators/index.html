@@ -2440,14 +2440,14 @@
 <td>Exposes a query parameter as a string property.</td>
 </tr>
 <tr>
-<td><code>@select(selector, { required? })</code></td>
+<td><code>@select(selector, { required?, global? })</code></td>
 <td><code>accessor</code></td>
-<td>First matching descendant. Read-only.</td>
+<td>First matching descendant; <code>global: true</code> searches the app container. Read-only.</td>
 </tr>
 <tr>
-<td><code>@selectAll(selector, { required? })</code></td>
+<td><code>@selectAll(selector, { required?, global? })</code></td>
 <td><code>accessor</code></td>
-<td>All matching descendants. Read-only.</td>
+<td>All matching descendants; <code>global: true</code> searches the app container. Read-only.</td>
 </tr>
 </tbody>
 </table>
