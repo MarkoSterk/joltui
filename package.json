@@ -12,6 +12,7 @@
   "license": "ISC",
   "author": "Marko Šterk <marko_sterk@hotmail.com>",
   "type": "module",
+  "bin": { "joltui": "./cli/index.mjs" },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -22,9 +23,12 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "cli",
+    "docs/**/*.md"
   ],
   "scripts": {
+    "test:cli": "node --test tests/cli.test.mjs",
     "clean": "rimraf dist",
     "build": "npm run clean && tsc",
     "prepare": "husky",

@@ -25,6 +25,7 @@ nav = [
     "getting-started/index.md",
     "getting-started/installation.md",
     "getting-started/quickstart.md",
+      "getting-started/cli.md",
     "getting-started/project-layout.md",
     "getting-started/first-component.md",
   ] },

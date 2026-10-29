@@ -35,6 +35,11 @@ npm run dev:build
 
 ## Quick start
 
+Create a starter application interactively with `npx joltui init`.
+Add framework guidance for coding agents with `npx joltui agents`, or
+`npx joltui agents claude` for Claude. See the [CLI guide](docs/getting-started/cli.md)
+for options and scoped-registry usage.
+
 Add an application container to the page:
 
 ```html
