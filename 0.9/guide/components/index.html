@@ -3014,6 +3014,17 @@ every time the property is read, so it always reflects the current DOM:</p>
 <p>With <code>required: true</code>, reading the property throws if nothing matches. Assigning to a selected
 property throws as well. Selectors may use the <code>:</code> shorthand: <code>@select("[:role=primary]")</code>
 matches <code>data-jolt-role="primary"</code>.</p>
+<p>By default, selections query inside the custom element. Set <code>global: true</code> to query
+inside the owning app's container, including sibling components:</p>
+<div class="language-typescript highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kd">@select</span><span class="o">&lt;</span><span class="nx">HTMLDivElement</span><span class="o">&gt;</span><span class="p">(</span><span class="s2">"#notification"</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">required</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span><span class="w"> </span><span class="nx">global</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="w"> </span><span class="p">})</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nx">accessor</span><span class="w"> </span><span class="nx">notification</span><span class="o">!:</span><span class="w"> </span><span class="nx">HTMLDivElement</span><span class="p">;</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="kd">@selectAll</span><span class="o">&lt;</span><span class="nx">HTMLButtonElement</span><span class="o">&gt;</span><span class="p">(</span><span class="s2">"button"</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">global</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="w"> </span><span class="p">})</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="nx">accessor</span><span class="w"> </span><span class="nx">appButtons</span><span class="o">!:</span><span class="w"> </span><span class="nx">NodeListOf</span><span class="o">&lt;</span><span class="nx">HTMLButtonElement</span><span class="o">&gt;</span><span class="p">;</span>
+</span></code></pre></div>
+<p><code>global</code> defaults to <code>false</code>. Global selections require an initialized app and stay
+within its container. The query runs on every read; <code>required</code> behaves the same in
+both scopes.</p>
 <h2 id="element-identity">Element identity<a class="headerlink" href="#element-identity" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
