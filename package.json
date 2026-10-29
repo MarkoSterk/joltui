@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://gitea.izum.pri/pro/joltui.git"
   },
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "TypeScript SPA framework",
   "license": "ISC",
   "author": "Marko Šterk <marko_sterk@hotmail.com>",
