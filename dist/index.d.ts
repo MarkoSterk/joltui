@@ -18,4 +18,5 @@ export type { RequestOptions, } from "./requestHelper.js";
 export { lazy, } from "./lazy.js";
 export type { LazyDependency, LazyImportLoader, } from "./lazy.js";
 export { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, AuthenticationError, AuthorizationError, NotImplementedError, RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType, NetworkError, HttpRequestError, JsonResponseError, InternalServerError, ServerComponentNotFound, ServerComponentBadRequestResponse, MarkupFetchError, DependencyLoadError, ElementInitializationError, } from "./errors.js";
+export type { ErrorResponse, ResponseErrorOptions } from "./errorResponse.js";
 //# sourceMappingURL=index.d.ts.map

@@ -1,3 +1,4 @@
+import { captureErrorResponse, createErrorResponse } from "./errorResponse.js";
 import App, { type AppContainer } from "./app.js";
 import {
     HttpRequestError,
@@ -94,7 +95,10 @@ export default class RequestHelper {
             const error = new NetworkError(
                 `Failed to execute ${method} request ` +
                 `to '${this.getRequestUrl(input)}'.`,
-                { cause: e },
+                {
+                    cause: e,
+                    response: createErrorResponse({ method, url: this.getRequestUrl(input) }),
+                },
             );
             return await this.handleError(app, error);
         }
@@ -103,6 +107,11 @@ export default class RequestHelper {
             const error = new HttpRequestError(
                 method,
                 response,
+                {
+                    response: await captureErrorResponse(response, {
+                        method, url: this.getRequestUrl(input),
+                    }),
+                },
             );
             return await this.handleError(app, error);
         }
@@ -115,7 +124,13 @@ export default class RequestHelper {
             const error = new JsonResponseError(
                 method,
                 response,
-                { cause: e },
+                {
+                    cause: e,
+                    response: {
+                        ...createErrorResponse({ method, url: this.getRequestUrl(input) }, response),
+                        bodyReadError: e,
+                    },
+                },
             );
             return await this.handleError(app, error);
         }
@@ -130,7 +145,13 @@ export default class RequestHelper {
             const error = new JsonResponseError(
                 method,
                 response,
-                { cause: e },
+                {
+                    cause: e,
+                    response: {
+                        ...createErrorResponse({ method, url: this.getRequestUrl(input) }, response),
+                        body: responseText,
+                    },
+                },
             );
             return await this.handleError(app, error);
         }

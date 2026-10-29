@@ -1,3 +1,4 @@
+import { captureErrorResponse, createErrorResponse } from "./errorResponse.js";
 import App, { dataEventEnum, } from "./app.js";
 import { replaceShorthandAttributes } from "./templateAttributes.js";
 import { awaitWithSignal, ElementDisconnectedError, isElementCancellation, } from "./cancellation.js";
@@ -564,11 +565,16 @@ export class CustomElement extends HTMLElement {
                 "'serverComponentsUrl' property at application initialization.");
         }
         let response;
+        const queryString = this.app.createQueryParametersString(request.queryParameters);
+        const url = queryString
+            ? `${this.app.serverComponentsUrl}?${queryString}`
+            : this.app.serverComponentsUrl;
+        const context = {
+            method: "POST", url,
+            tagName: request.tagName,
+            groupName: request.groupName,
+        };
         try {
-            const queryString = this.app.createQueryParametersString(request.queryParameters);
-            const url = queryString
-                ? `${this.app.serverComponentsUrl}?${queryString}`
-                : this.app.serverComponentsUrl;
             response = await fetch(url, {
                 method: "POST",
                 signal,
@@ -579,13 +585,15 @@ export class CustomElement extends HTMLElement {
                 body: JSON.stringify(request)
             });
         }
-        catch {
+        catch (cause) {
             signal?.throwIfAborted();
-            throw new NetworkError("Failed to fetch requested content. Server unresponsive.");
+            throw new NetworkError("Failed to fetch requested content. Server unresponsive.", { cause, response: createErrorResponse(context) });
         }
         signal?.throwIfAborted();
         if (!response.ok) {
-            return this._checkFetchHTMLError(response, request);
+            const details = await captureErrorResponse(response, context);
+            signal?.throwIfAborted();
+            return this._checkFetchHTMLError(response, request, details);
         }
         try {
             const text = await response.text();
@@ -603,22 +611,27 @@ export class CustomElement extends HTMLElement {
             throw new MarkupFetchError("Failed to read fetched html markup for 2xx responses.", request.tagName);
         }
     };
-    _checkFetchHTMLError = (response, request) => {
+    _checkFetchHTMLError = (response, request, details = createErrorResponse({
+        method: "POST",
+        tagName: request.tagName,
+        groupName: request.groupName,
+    }, response)) => {
+        const options = { response: details };
         const requestedPath = `${location.pathname}${location.search}`;
         if (response.status >= 500) {
-            throw new InternalServerError(`Server component fetch failed with status ${response.status}`);
+            throw new InternalServerError(`Server component fetch failed with status ${response.status}`, options);
         }
         switch (response.status) {
             case 400:
-                throw new ServerComponentBadRequestResponse(request.tagName, request.groupName);
+                throw new ServerComponentBadRequestResponse(request.tagName, request.groupName, options);
             case 401:
-                throw new AuthenticationError(requestedPath);
+                throw new AuthenticationError(requestedPath, options);
             case 403:
-                throw new AuthorizationError(requestedPath, []);
+                throw new AuthorizationError(requestedPath, [], options);
             case 404:
-                throw new ServerComponentNotFound(request.tagName, request.groupName);
+                throw new ServerComponentNotFound(request.tagName, request.groupName, options);
             default:
-                throw new HttpRequestError("POST", response);
+                throw new HttpRequestError("POST", response, options);
         }
     };
     rerender = async () => {

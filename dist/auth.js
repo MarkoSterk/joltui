@@ -1,3 +1,4 @@
+import { ResponseError } from "./errorResponse.js";
 import { setElementAuthenticationMetadata, } from "./elementMetadata.js";
 export function auth(roles = []) {
     if (!Array.isArray(roles)) {
@@ -14,7 +15,7 @@ export function auth(roles = []) {
         });
     };
 }
-export class AuthenticationError extends Error {
+export class AuthenticationError extends ResponseError {
     path;
     constructor(path, options) {
         super("User not authenticated", options);
@@ -22,7 +23,7 @@ export class AuthenticationError extends Error {
         this.name = "AuthenticationError";
     }
 }
-export class AuthorizationError extends Error {
+export class AuthorizationError extends ResponseError {
     path;
     roles;
     constructor(path, roles, options) {

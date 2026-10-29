@@ -1,3 +1,4 @@
+import { captureErrorResponse, createErrorResponse, type ErrorResponse } from "./errorResponse.js";
 import App, {
     type AppContainer,
     dataEventEnum,
@@ -1031,14 +1032,17 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
             );
         }
         let response: Response;
+        const queryString =
+            this.app.createQueryParametersString(request.queryParameters);
+        const url = queryString
+            ? `${this.app.serverComponentsUrl}?${queryString}`
+            : this.app.serverComponentsUrl;
+        const context = {
+            method: "POST", url,
+            tagName: request.tagName,
+            groupName: request.groupName,
+        };
         try {
-            const queryString =
-                this.app.createQueryParametersString(
-                    request.queryParameters,
-                );
-            const url = queryString
-                ? `${this.app.serverComponentsUrl}?${queryString}`
-                : this.app.serverComponentsUrl;
             response = await fetch(url, {
                 method: "POST",
                 signal,
@@ -1049,17 +1053,21 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
                 },
                 body: JSON.stringify(request)
             });
-        } catch {
+        } catch (cause) {
             signal?.throwIfAborted();
             throw new NetworkError(
-                "Failed to fetch requested content. Server unresponsive."
+                "Failed to fetch requested content. Server unresponsive.",
+                { cause, response: createErrorResponse(context) },
             );
         }
         signal?.throwIfAborted();
         if (!response.ok) {
+            const details = await captureErrorResponse(response, context);
+            signal?.throwIfAborted();
             return this._checkFetchHTMLError(
                 response,
                 request,
+                details,
             );
         }
         try {
@@ -1087,24 +1095,30 @@ export abstract class CustomElement<TApp extends App = App> extends HTMLElement 
     _checkFetchHTMLError = (
         response: Response,
         request: ResolvedFetchHtmlRequest,
+        details: ErrorResponse = createErrorResponse({
+            method: "POST",
+            tagName: request.tagName,
+            groupName: request.groupName,
+        }, response),
     ): never => {
+        const options = { response: details };
         const requestedPath =
             `${location.pathname}${location.search}`;
 
         if(response.status >= 500){
-            throw new InternalServerError(`Server component fetch failed with status ${response.status}`);
+            throw new InternalServerError(`Server component fetch failed with status ${response.status}`, options);
         }
         switch(response.status){
             case 400:
-                throw new ServerComponentBadRequestResponse(request.tagName, request.groupName);
+                throw new ServerComponentBadRequestResponse(request.tagName, request.groupName, options);
             case 401:   
-                throw new AuthenticationError(requestedPath);
+                throw new AuthenticationError(requestedPath, options);
             case 403:
-                throw new AuthorizationError(requestedPath, []);
+                throw new AuthorizationError(requestedPath, [], options);
             case 404:
-                throw new ServerComponentNotFound(request.tagName, request.groupName)
+                throw new ServerComponentNotFound(request.tagName, request.groupName, options)
             default:
-                throw new HttpRequestError("POST", response);
+                throw new HttpRequestError("POST", response, options);
         }
     }
 

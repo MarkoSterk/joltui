@@ -82,6 +82,40 @@ through several parent components is reported a single time.
 
 ## Errors and their causes
 
+### HTTP response details
+
+Non-successful HTTP responses from server components and `RequestHelper` retain
+their existing error types and expose an `error.response` snapshot:
+
+| Field | Meaning |
+| --- | --- |
+| `status`, `statusText`, `ok` | HTTP status information |
+| `headers` | Browser-visible response headers, as `Headers` |
+| `body` | Original response text, including server error IDs |
+| `data` | Parsed JSON when the content type is JSON and parsing succeeds |
+| `url`, `redirected`, `type` | Response metadata; URL falls back to the requested URL |
+| `method` | Request method |
+| `tagName`, `groupName` | Requested component, for server-component requests |
+| `synthetic` | Whether no HTTP response was available |
+| `bodyReadError` | Failure to read the body, if any; the HTTP error is retained |
+
+For example, an existing `@handles(InternalServerError)` handler can read
+`error.response.body` or `error.response.headers.get("x-error-id")`.
+The snapshot is not a Fetch `Response`: its body is an already-read string.
+Empty bodies remain empty; malformed JSON remains available as raw text.
+Successful responses that fail JSON decoding in `RequestHelper` also retain
+their body, or their body-read error.
+
+Network failures use the same interface with `synthetic: true`, `status: 0`,
+`statusText: ""`, `ok: false`, `type: "error"`, `redirected: false`, empty headers
+and body, plus the known request context. The original exception is in `cause`.
+Zero is a sentinel, not an HTTP status returned by a server. Errors constructed
+without a response (including local route authentication failures) also have a
+synthetic snapshot; unknown request fields are empty.
+
+Response capture does not display server HTML or change initialization/recovery
+behavior. Browser-restricted headers are unavailable.
+
 JoltUI wraps errors to add context: *which* method of *which* component failed. The original error
 is kept in the standard `cause` property, just like Java's exception chaining:
 

@@ -1,3 +1,4 @@
+import { type ErrorResponse } from "./errorResponse.js";
 import App from "./app.js";
 import { type DoTDataBindTemplates, type DoTSanitizeFunction, type DoTTemplateSettings } from "./dotjs/dot.js";
 import { Lifecycle } from "./lifecycle.js";
@@ -132,7 +133,7 @@ export declare abstract class CustomElement<TApp extends App = App> extends HTML
     fetchHTML: (request: FetchHtmlRequest, optionsOrSignal?: FetchHtmlOptions | AbortSignal | null) => Promise<string>;
     prefetchHTML: (request: FetchHtmlRequest, options?: PrefetchHtmlOptions) => Promise<string>;
     protected _requestHTML: (request: ResolvedFetchHtmlRequest, signal: AbortSignal | null) => Promise<string>;
-    _checkFetchHTMLError: (response: Response, request: ResolvedFetchHtmlRequest) => never;
+    _checkFetchHTMLError: (response: Response, request: ResolvedFetchHtmlRequest, details?: ErrorResponse) => never;
     rerender: () => Promise<void>;
     protected _waitForSubelements(): Promise<void>;
     generateHash(length?: number): string;

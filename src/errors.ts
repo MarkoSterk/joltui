@@ -1,17 +1,18 @@
+import { ResponseError, createErrorResponse, type ResponseErrorOptions } from "./errorResponse.js";
 import { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, ElementInitializationError, MarkupFetchError } from "./customElement.js";
 import { AuthenticationError, AuthorizationError } from "./auth.js";
 import { NotImplementedError } from "./utilities.js";
 import {RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType} from "./router.js";
 import { DependencyLoadError } from "./lazy.js";
 
-class NetworkError extends Error{
-    constructor(msg: string, options?: ErrorOptions){
+class NetworkError extends ResponseError{
+    constructor(msg: string, options?: ResponseErrorOptions){
         super(msg, options);
         this.name = "NetworkError";
     }
 }
 
-class HttpRequestError extends Error {
+class HttpRequestError extends ResponseError {
     readonly method: string;
     readonly status: number;
     readonly statusText: string;
@@ -20,12 +21,12 @@ class HttpRequestError extends Error {
     constructor(
         method: string,
         response: Response,
-        options?: ErrorOptions,
+        options?: ResponseErrorOptions,
     ) {
         super(
             `${method} request to '${response.url}' failed ` +
             `with status ${response.status} ${response.statusText}.`,
-            options,
+            { ...options, response: options?.response ?? createErrorResponse({ method }, response) },
         );
         this.name = "HttpRequestError";
         this.method = method;
@@ -35,7 +36,7 @@ class HttpRequestError extends Error {
     }
 }
 
-class JsonResponseError extends Error {
+class JsonResponseError extends ResponseError {
     readonly method: string;
     readonly status: number;
     readonly url: string;
@@ -43,12 +44,12 @@ class JsonResponseError extends Error {
     constructor(
         method: string,
         response: Response,
-        options?: ErrorOptions,
+        options?: ResponseErrorOptions,
     ) {
         super(
             `Failed to parse JSON response from ${method} ` +
             `request to '${response.url}'.`,
-            options,
+            { ...options, response: options?.response ?? createErrorResponse({ method }, response) },
         );
         this.name = "JsonResponseError";
         this.method = method;
@@ -57,29 +58,29 @@ class JsonResponseError extends Error {
     }
 }
 
-class InternalServerError extends Error{
-    constructor(msg: string){
-        super(msg);
+class InternalServerError extends ResponseError{
+    constructor(msg: string, options?: ResponseErrorOptions){
+        super(msg, options);
         this.name = "InternalServerError";
     }
 }
 
-class ServerComponentNotFound extends Error{
+class ServerComponentNotFound extends ResponseError{
     protected readonly tagName: string;
     protected readonly groupName: string;
-    constructor(tagName: string, groupName: string){
-        super(`Server component with tagName '${tagName}' in group '${groupName}' not found.`);
+    constructor(tagName: string, groupName: string, options?: ResponseErrorOptions){
+        super(`Server component with tagName '${tagName}' in group '${groupName}' not found.`, options);
         this.tagName = tagName;
         this.groupName = groupName;
         this.name = "ServerComponentNotFound";
     }
 }
 
-class ServerComponentBadRequestResponse extends Error{
+class ServerComponentBadRequestResponse extends ResponseError{
     protected readonly tagName: string;
     protected readonly groupName: string;
-    constructor(tagName: string, groupName: string){
-        super(`Server component with tagName '${tagName}' in group '${groupName}' returned a bad request response.`);
+    constructor(tagName: string, groupName: string, options?: ResponseErrorOptions){
+        super(`Server component with tagName '${tagName}' in group '${groupName}' returned a bad request response.`, options);
         this.tagName = tagName;
         this.groupName = groupName;
         this.name = "ServerComponentBadRequestResponse";

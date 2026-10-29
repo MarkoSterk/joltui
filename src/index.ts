@@ -145,3 +145,5 @@ export {
     DependencyLoadError,
     ElementInitializationError,
 } from "./errors.js";
+
+export type { ErrorResponse, ResponseErrorOptions } from "./errorResponse.js";

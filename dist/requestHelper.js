@@ -1,3 +1,4 @@
+import { captureErrorResponse, createErrorResponse } from "./errorResponse.js";
 import App, {} from "./app.js";
 import { HttpRequestError, JsonResponseError, NetworkError, } from "./errors.js";
 export default class RequestHelper {
@@ -28,11 +29,18 @@ export default class RequestHelper {
         }
         catch (e) {
             const error = new NetworkError(`Failed to execute ${method} request ` +
-                `to '${this.getRequestUrl(input)}'.`, { cause: e });
+                `to '${this.getRequestUrl(input)}'.`, {
+                cause: e,
+                response: createErrorResponse({ method, url: this.getRequestUrl(input) }),
+            });
             return await this.handleError(app, error);
         }
         if (!response.ok) {
-            const error = new HttpRequestError(method, response);
+            const error = new HttpRequestError(method, response, {
+                response: await captureErrorResponse(response, {
+                    method, url: this.getRequestUrl(input),
+                }),
+            });
             return await this.handleError(app, error);
         }
         let responseText;
@@ -40,7 +48,13 @@ export default class RequestHelper {
             responseText = await response.text();
         }
         catch (e) {
-            const error = new JsonResponseError(method, response, { cause: e });
+            const error = new JsonResponseError(method, response, {
+                cause: e,
+                response: {
+                    ...createErrorResponse({ method, url: this.getRequestUrl(input) }, response),
+                    bodyReadError: e,
+                },
+            });
             return await this.handleError(app, error);
         }
         if (responseText.trim().length === 0) {
@@ -50,7 +64,13 @@ export default class RequestHelper {
             return JSON.parse(responseText);
         }
         catch (e) {
-            const error = new JsonResponseError(method, response, { cause: e });
+            const error = new JsonResponseError(method, response, {
+                cause: e,
+                response: {
+                    ...createErrorResponse({ method, url: this.getRequestUrl(input) }, response),
+                    body: responseText,
+                },
+            });
             return await this.handleError(app, error);
         }
     }

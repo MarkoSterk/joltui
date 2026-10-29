@@ -1,3 +1,4 @@
+import { ResponseError, type ResponseErrorOptions } from "./errorResponse.js";
 import type { CustomElementClass } from "./customElement.js";
 import {
     setElementAuthenticationMetadata,
@@ -36,12 +37,12 @@ export function auth(
     };
 }
 
-export class AuthenticationError extends Error {
+export class AuthenticationError extends ResponseError {
     readonly path: string;
 
     constructor(
         path: string,
-        options?: ErrorOptions,
+        options?: ResponseErrorOptions,
     ) {
         super("User not authenticated", options);
         this.path = path;
@@ -49,14 +50,14 @@ export class AuthenticationError extends Error {
     }
 }
 
-export class AuthorizationError extends Error {
+export class AuthorizationError extends ResponseError {
     readonly path: string;
     readonly roles: unknown[];
 
     constructor(
         path: string,
         roles: unknown[],
-        options?: ErrorOptions,
+        options?: ResponseErrorOptions,
     ) {
         super("User is not authorized for this route", options);
         this.path = path;

@@ -1,22 +1,23 @@
+import { ResponseError, createErrorResponse } from "./errorResponse.js";
 import { RenderError, DotJSEngineError, MissingMarkupMethod, MethodExecutionError, ElementInitializationError, MarkupFetchError } from "./customElement.js";
 import { AuthenticationError, AuthorizationError } from "./auth.js";
 import { NotImplementedError } from "./utilities.js";
 import { RouteFailedError, RouteNotFoundError, RouteParametersError, UnsupportedRouteParameterType } from "./router.js";
 import { DependencyLoadError } from "./lazy.js";
-class NetworkError extends Error {
+class NetworkError extends ResponseError {
     constructor(msg, options) {
         super(msg, options);
         this.name = "NetworkError";
     }
 }
-class HttpRequestError extends Error {
+class HttpRequestError extends ResponseError {
     method;
     status;
     statusText;
     url;
     constructor(method, response, options) {
         super(`${method} request to '${response.url}' failed ` +
-            `with status ${response.status} ${response.statusText}.`, options);
+            `with status ${response.status} ${response.statusText}.`, { ...options, response: options?.response ?? createErrorResponse({ method }, response) });
         this.name = "HttpRequestError";
         this.method = method;
         this.status = response.status;
@@ -24,40 +25,40 @@ class HttpRequestError extends Error {
         this.url = response.url;
     }
 }
-class JsonResponseError extends Error {
+class JsonResponseError extends ResponseError {
     method;
     status;
     url;
     constructor(method, response, options) {
         super(`Failed to parse JSON response from ${method} ` +
-            `request to '${response.url}'.`, options);
+            `request to '${response.url}'.`, { ...options, response: options?.response ?? createErrorResponse({ method }, response) });
         this.name = "JsonResponseError";
         this.method = method;
         this.status = response.status;
         this.url = response.url;
     }
 }
-class InternalServerError extends Error {
-    constructor(msg) {
-        super(msg);
+class InternalServerError extends ResponseError {
+    constructor(msg, options) {
+        super(msg, options);
         this.name = "InternalServerError";
     }
 }
-class ServerComponentNotFound extends Error {
+class ServerComponentNotFound extends ResponseError {
     tagName;
     groupName;
-    constructor(tagName, groupName) {
-        super(`Server component with tagName '${tagName}' in group '${groupName}' not found.`);
+    constructor(tagName, groupName, options) {
+        super(`Server component with tagName '${tagName}' in group '${groupName}' not found.`, options);
         this.tagName = tagName;
         this.groupName = groupName;
         this.name = "ServerComponentNotFound";
     }
 }
-class ServerComponentBadRequestResponse extends Error {
+class ServerComponentBadRequestResponse extends ResponseError {
     tagName;
     groupName;
-    constructor(tagName, groupName) {
-        super(`Server component with tagName '${tagName}' in group '${groupName}' returned a bad request response.`);
+    constructor(tagName, groupName, options) {
+        super(`Server component with tagName '${tagName}' in group '${groupName}' returned a bad request response.`, options);
         this.tagName = tagName;
         this.groupName = groupName;
         this.name = "ServerComponentBadRequestResponse";
