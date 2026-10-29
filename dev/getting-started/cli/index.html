@@ -2366,10 +2366,17 @@ When using the scoped distribution, bootstrap with
 The unqualified <code>npx joltui</code> works when the executable is installed locally, or
 when the package is published as <code>joltui</code> on your configured registry.</p>
 <h2 id="create-an-application">Create an application<a class="headerlink" href="#create-an-application" title="Permanent link">&para;</a></h2>
-<p><code>init</code> asks for an application name (default <code>my-joltui-app</code>), whether to include
+<p>Run <code>init</code> in your application root, including after <code>npm init</code> and installing JoltUI.
+It scaffolds the <strong>current directory</strong>, without creating a nested project.</p>
+<p><code>init</code> asks for an application name (defaulting to the existing package name or directory name), whether to include
 Vite (yes), whether to include the JoltUI Vite plugin (yes when Vite is selected),
-and whether to install dependencies immediately (yes). It creates a new directory
-with that name and refuses to overwrite any existing directory.</p>
+and whether to install dependencies immediately (yes). The app name is used for
+application metadata, never as an output directory.</p>
+<p>Existing package metadata, scripts, and dependency versions are preserved; missing
+scripts and dependencies are added to the same <code>package.json</code>. Installation runs
+in that directory and reuses its <code>node_modules</code> and lockfile. Existing README and
+ignore files are preserved. Conflicting source or configuration files stop initialization
+before any files are changed. In an empty directory, <code>init</code> creates <code>package.json</code>.</p>
 <p>The starter includes TypeScript configuration, an HTML entry, an application,
 router, layout, reactive counter page, stylesheet, and npm scripts. Without the
 plugin, pages are registered explicitly. Without Vite, configure your own bundler
@@ -2382,7 +2389,8 @@ before serving the app; <code>npm run typecheck</code> remains available.</p>
 <p><code>--yes</code> accepts defaults and is required without an interactive terminal.
 <code>--no-install</code> writes files without running npm. Install failures retain the
 generated files so you can correct registry settings and rerun <code>npm install</code>.
-Scoped releases generate npm aliases to their scoped framework and plugin packages.</p>
+Existing scoped framework dependencies are reused directly. When adding dependencies,
+scoped releases generate npm aliases to their scoped framework and plugin packages.</p>
 <h2 id="coding-agents">Coding agents<a class="headerlink" href="#coding-agents" title="Permanent link">&para;</a></h2>
 <p>Run <code>agents</code> from your application root. The optional agent name is <code>generic</code>
 (default), <code>codex</code>, or <code>claude</code>, case insensitive.</p>
