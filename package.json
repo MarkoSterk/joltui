@@ -13,7 +13,7 @@
   "author": "Marko Šterk <marko_sterk@hotmail.com>",
   "type": "module",
   "bin": {
-    "joltui": "./cli/index.mjs"
+    "joltui": "cli/index.mjs"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -30,6 +30,7 @@
     "docs/**/*.md"
   ],
   "scripts": {
+    "test:properties": "npm run build && node --test tests/properties.test.mjs",
     "test:cli": "node --test tests/cli.test.mjs",
     "clean": "rimraf dist",
     "build": "npm run clean && tsc",

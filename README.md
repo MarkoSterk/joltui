@@ -693,6 +693,21 @@ accessor buttons!: NodeListOf<HTMLButtonElement>;
 
 Required selections throw when no matching element is found.
 
+By default, selections query inside the custom element. Set `global: true` to query
+inside the owning app's container, including sibling components:
+
+```typescript
+@select<HTMLDivElement>("#notification", { required: true, global: true })
+accessor notification!: HTMLDivElement;
+
+@selectAll<HTMLButtonElement>("button", { global: true })
+accessor appButtons!: NodeListOf<HTMLButtonElement>;
+```
+
+`global` defaults to `false`. Global selections require an initialized app and stay
+within its container. The query runs on every read; `required` behaves the same in
+both scopes.
+
 ## Server-rendered components
 
 Configure the endpoint on the application and opt a component into server rendering:

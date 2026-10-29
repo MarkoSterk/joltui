@@ -295,6 +295,21 @@ With `required: true`, reading the property throws if nothing matches. Assigning
 property throws as well. Selectors may use the `:` shorthand: `@select("[:role=primary]")`
 matches `data-jolt-role="primary"`.
 
+By default, selections query inside the custom element. Set `global: true` to query
+inside the owning app's container, including sibling components:
+
+```typescript
+@select<HTMLDivElement>("#notification", { required: true, global: true })
+accessor notification!: HTMLDivElement;
+
+@selectAll<HTMLButtonElement>("button", { global: true })
+accessor appButtons!: NodeListOf<HTMLButtonElement>;
+```
+
+`global` defaults to `false`. Global selections require an initialized app and stay
+within its container. The query runs on every read; `required` behaves the same in
+both scopes.
+
 ## Element identity
 
 | Member | Description |

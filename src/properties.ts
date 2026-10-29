@@ -20,6 +20,8 @@ export interface QueryParameterHost
 
 export interface SelectOptions {
     required?: boolean;
+    /** Query inside the owning app's container instead of this element. */
+    global?: boolean;
 }
 
 export interface RequiredSelectOptions
@@ -32,8 +34,27 @@ export interface OptionalSelectOptions
     required?: false;
 }
 
-export interface SelectAllOptions {
-    required?: boolean;
+export interface SelectAllOptions extends SelectOptions {}
+
+function getSelectionRoot(
+    host: ParentNode,
+    global: boolean = false,
+): ParentNode {
+    if (!global) {
+        return host;
+    }
+
+    const app = (host as ParentNode & {
+        readonly app?: { readonly container: ParentNode };
+    }).app;
+
+    if (!app) {
+        throw new Error(
+            "Global selection requires an initialized application.",
+        );
+    }
+
+    return app.container;
 }
 
 type AccessorTarget<
@@ -465,7 +486,7 @@ export function select<
                 this: THost,
             ): TValue {
                 const element =
-                    this.querySelector<
+                    getSelectionRoot(this, options.global).querySelector<
                         TElement
                     >(
                         normalizedSelector,
@@ -552,7 +573,7 @@ export function selectAll<
                 this: THost,
             ): NodeListOf<TElement> {
                 const elements =
-                    this.querySelectorAll<
+                    getSelectionRoot(this, options.global).querySelectorAll<
                         TElement
                     >(
                         normalizedSelector,

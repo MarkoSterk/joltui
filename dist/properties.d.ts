@@ -9,6 +9,8 @@ export interface QueryParameterHost extends ReactivePropertyHost {
 }
 export interface SelectOptions {
     required?: boolean;
+    /** Query inside the owning app's container instead of this element. */
+    global?: boolean;
 }
 export interface RequiredSelectOptions extends SelectOptions {
     required: true;
@@ -16,8 +18,7 @@ export interface RequiredSelectOptions extends SelectOptions {
 export interface OptionalSelectOptions extends SelectOptions {
     required?: false;
 }
-export interface SelectAllOptions {
-    required?: boolean;
+export interface SelectAllOptions extends SelectOptions {
 }
 type AccessorTarget<THost, TValue> = ClassAccessorDecoratorTarget<THost, TValue>;
 type AccessorContext<THost, TValue> = ClassAccessorDecoratorContext<THost, TValue>;

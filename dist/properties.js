@@ -1,3 +1,13 @@
+function getSelectionRoot(host, global = false) {
+    if (!global) {
+        return host;
+    }
+    const app = host.app;
+    if (!app) {
+        throw new Error("Global selection requires an initialized application.");
+    }
+    return app.container;
+}
 function assertAccessor(context, decoratorName) {
     if (context.static) {
         throw new TypeError(`${decoratorName} cannot decorate a static accessor.`);
@@ -115,7 +125,7 @@ export function select(selector, options = {}) {
                 return null;
             },
             get() {
-                const element = this.querySelector(normalizedSelector);
+                const element = getSelectionRoot(this, options.global).querySelector(normalizedSelector);
                 if (element === null &&
                     options.required) {
                     throw new Error(`Required element '${normalizedSelector}' ` +
@@ -139,7 +149,7 @@ export function selectAll(selector, options = {}) {
                 return createEmptyNodeList();
             },
             get() {
-                const elements = this.querySelectorAll(normalizedSelector);
+                const elements = getSelectionRoot(this, options.global).querySelectorAll(normalizedSelector);
                 if (options.required &&
                     elements.length === 0) {
                     throw new Error(`No elements matching ` +

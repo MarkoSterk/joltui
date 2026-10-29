@@ -11,8 +11,8 @@
 | `@react(initial, binding?)` | `accessor` | Reactive state; assignment refreshes `binding` (default: the property name). |
 | `@reactFactory(factory, binding?)` | `accessor` | Reactive state with a per-instance factory. |
 | `@queryParam(name, default?, binding?)` | `accessor` | Exposes a query parameter as a string property. |
-| `@select(selector, { required? })` | `accessor` | First matching descendant. Read-only. |
-| `@selectAll(selector, { required? })` | `accessor` | All matching descendants. Read-only. |
+| `@select(selector, { required?, global? })` | `accessor` | First matching descendant; `global: true` searches the app container. Read-only. |
+| `@selectAll(selector, { required?, global? })` | `accessor` | All matching descendants; `global: true` searches the app container. Read-only. |
 
 ## Stacking order
 
