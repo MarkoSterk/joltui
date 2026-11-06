@@ -2,7 +2,8 @@ export function scaffold({ name, vite, plugin, packageName, version }) {
     // Aliases keep examples and the plugin's default frameworkPackage consistent
     // with both public and scoped registry distributions.
     const dependency = packageName === 'joltui' ? `^${version}` : `npm:${packageName}@^${version}`;
-    const pluginPackage = packageName.replace(/joltui$/, 'joltui-vite-plugin');
+    // joltui -> joltui-vite-plugin, @pro/joltui -> @pro/joltui-vite-plugin, jolt-ui -> jolt-ui-vite-plugin
+    const pluginPackage = `${packageName}-vite-plugin`;
     const json = value => JSON.stringify(value, null, 2) + '\n';
     const files = {
         'package.json': json({ name, version: '0.0.0', private: true, type: 'module',

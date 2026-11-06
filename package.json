@@ -41,7 +41,9 @@
     "dev": "vite --config dev/vite.config.ts",
     "dev:build": "vite build --config dev/vite.config.ts",
     "dev:preview": "vite preview --config dev/vite.config.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "postpublish": "node scripts/publish-npm.mjs",
+    "publish:npm": "node scripts/publish-npm.mjs"
   },
   "devDependencies": {
     "@lit-labs/rollup-plugin-minify-html-literals": "^0.2.0",

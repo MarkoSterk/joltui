@@ -7,3 +7,5 @@ node_modules/
 site/
 .cache/
 __pycache__/
+
+.cli-smoke*/
