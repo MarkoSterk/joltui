@@ -26,7 +26,7 @@
       
       
       <link rel="icon" href="../../assets/joltui-logo.png">
-      <meta name="generator" content="zensical-0.0.73">
+      <meta name="generator" content="zensical-0.1.0">
     
     
       
@@ -238,8 +238,6 @@
       
         
           
-        
-      
         
       
         
@@ -493,8 +491,6 @@
       
         
       
-        
-      
     
     
     
@@ -590,33 +586,6 @@
     
   
   Quickstart
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-                
-              
-                
-                  
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../getting-started/cli/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Command line tools
 
     
   </span>
@@ -1349,23 +1318,6 @@
       </span>
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Errors and their causes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#http-response-details" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        HTTP response details
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -2356,23 +2308,6 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Errors and their causes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#http-response-details" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        HTTP response details
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
         <li class="md-nav__item">
@@ -2653,69 +2588,6 @@ so handler methods can use <code>this.app</code>. A method may handle several ty
 object and handles it only once; JoltUI uses it so that an initialization failure that propagates
 through several parent components is reported a single time.</p>
 <h2 id="errors-and-their-causes">Errors and their causes<a class="headerlink" href="#errors-and-their-causes" title="Permanent link">&para;</a></h2>
-<h3 id="http-response-details">HTTP response details<a class="headerlink" href="#http-response-details" title="Permanent link">&para;</a></h3>
-<p>Non-successful HTTP responses from server components and <code>RequestHelper</code> retain
-their existing error types and expose an <code>error.response</code> snapshot:</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>status</code>, <code>statusText</code>, <code>ok</code></td>
-<td>HTTP status information</td>
-</tr>
-<tr>
-<td><code>headers</code></td>
-<td>Browser-visible response headers, as <code>Headers</code></td>
-</tr>
-<tr>
-<td><code>body</code></td>
-<td>Original response text, including server error IDs</td>
-</tr>
-<tr>
-<td><code>data</code></td>
-<td>Parsed JSON when the content type is JSON and parsing succeeds</td>
-</tr>
-<tr>
-<td><code>url</code>, <code>redirected</code>, <code>type</code></td>
-<td>Response metadata; URL falls back to the requested URL</td>
-</tr>
-<tr>
-<td><code>method</code></td>
-<td>Request method</td>
-</tr>
-<tr>
-<td><code>tagName</code>, <code>groupName</code></td>
-<td>Requested component, for server-component requests</td>
-</tr>
-<tr>
-<td><code>synthetic</code></td>
-<td>Whether no HTTP response was available</td>
-</tr>
-<tr>
-<td><code>bodyReadError</code></td>
-<td>Failure to read the body, if any; the HTTP error is retained</td>
-</tr>
-</tbody>
-</table>
-<p>For example, an existing <code>@handles(InternalServerError)</code> handler can read
-<code>error.response.body</code> or <code>error.response.headers.get("x-error-id")</code>.
-The snapshot is not a Fetch <code>Response</code>: its body is an already-read string.
-Empty bodies remain empty; malformed JSON remains available as raw text.
-Successful responses that fail JSON decoding in <code>RequestHelper</code> also retain
-their body, or their body-read error.</p>
-<p>Network failures use the same interface with <code>synthetic: true</code>, <code>status: 0</code>,
-<code>statusText: ""</code>, <code>ok: false</code>, <code>type: "error"</code>, <code>redirected: false</code>, empty headers
-and body, plus the known request context. The original exception is in <code>cause</code>.
-Zero is a sentinel, not an HTTP status returned by a server. Errors constructed
-without a response (including local route authentication failures) also have a
-synthetic snapshot; unknown request fields are empty.</p>
-<p>Response capture does not display server HTML or change initialization/recovery
-behavior. Browser-restricted headers are unavailable.</p>
 <p>JoltUI wraps errors to add context: <em>which</em> method of <em>which</em> component failed. The original error
 is kept in the standard <code>cause</code> property, just like Java's exception chaining:</p>
 <div class="language-typescript highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kd">class</span><span class="w"> </span><span class="nx">ValidationError</span><span class="w"> </span><span class="k">extends</span><span class="w"> </span><span class="ne">Error</span><span class="w"> </span><span class="p">{</span>
@@ -2991,10 +2863,10 @@ error handlers see it once.</p>
       
         
         
-      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.action.edit","content.action.view","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.top","navigation.tracking","search.highlight","toc.follow"],"redirect":null,"search":"../../assets/javascripts/workers/search.c47bb847.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":{"alias":true,"default":"latest","provider":"mike"}}</script>
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.action.edit","content.action.view","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.top","navigation.tracking","search.highlight","toc.follow"],"redirect":null,"search":"../../assets/javascripts/workers/search.719e0d91.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":{"alias":true,"default":"latest","provider":"mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.77dd0ce9.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d31f0ffa.min.js"></script>
       
     
   </body>
