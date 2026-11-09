@@ -2428,12 +2428,17 @@
 <li>an ES-module build tool. The documentation uses <strong>Vite</strong>.</li>
 </ul>
 <h2 id="create-the-project">Create the project<a class="headerlink" href="#create-the-project" title="Permanent link">&para;</a></h2>
+<p>To install from the public npm registry (npmjs.com):</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mkdir<span class="w"> </span>my-app<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>my-app
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>npm<span class="w"> </span>init<span class="w"> </span>-y
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>npm<span class="w"> </span>install<span class="w"> </span>joltui
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>npm<span class="w"> </span>install<span class="w"> </span>joltui@npm:jolt-ui
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>npm<span class="w"> </span>install<span class="w"> </span>--save-dev<span class="w"> </span>typescript<span class="w"> </span>vite<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span>vite-plugin-typescript-transform<span class="w"> </span>joltui-vite-plugin
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span>vite-plugin-typescript-transform<span class="w"> </span>joltui-vite-plugin@npm:jolt-ui-vite-plugin
 </span></code></pre></div>
+<p>On npm, JoltUI is published as <code>jolt-ui</code>. The <code>joltui@npm:jolt-ui</code> alias installs it
+under the name <code>joltui</code>, so imports stay <code>from "joltui"</code>. (A plain <code>npm install jolt-ui</code>
+works too, but then you import from <code>"jolt-ui"</code>.)
+The Vite plugin is published on npm as <code>jolt-ui-vite-plugin</code> and installed the same way, as <code>joltui-vite-plugin</code>.</p>
 <ul>
 <li><code>joltui-vite-plugin</code> discovers pages automatically (<a href="../../guide/vite-plugin/">Vite plugin</a>).
   It is optional; without it you list the pages on the router yourself.</li>

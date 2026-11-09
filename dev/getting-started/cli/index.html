@@ -2361,10 +2361,9 @@
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>npx<span class="w"> </span>joltui<span class="w"> </span>agents<span class="w"> </span>claude
 </span></code></pre></div>
 <p><code>npm exec -- joltui init</code> is equivalent. <code>npm joltui init</code> is not an npm command.
-When using the scoped distribution, bootstrap with
-<code>npx --package=@pro/joltui joltui init</code>; configure your private registry first.
-The unqualified <code>npx joltui</code> works when the executable is installed locally, or
-when the package is published as <code>joltui</code> on your configured registry.</p>
+The unqualified <code>npx joltui</code> works once JoltUI is installed locally
+(<code>npm install joltui@npm:jolt-ui</code>). Before that, run the executable from the npm
+package directly: <code>npx jolt-ui init</code> (equivalent to <code>npx --package=jolt-ui joltui init</code>).</p>
 <h2 id="create-an-application">Create an application<a class="headerlink" href="#create-an-application" title="Permanent link">&para;</a></h2>
 <p>Run <code>init</code> in your application root, including after <code>npm init</code> and installing JoltUI.
 It scaffolds the <strong>current directory</strong>, without creating a nested project.</p>
@@ -2389,8 +2388,9 @@ before serving the app; <code>npm run typecheck</code> remains available.</p>
 <p><code>--yes</code> accepts defaults and is required without an interactive terminal.
 <code>--no-install</code> writes files without running npm. Install failures retain the
 generated files so you can correct registry settings and rerun <code>npm install</code>.
-Existing scoped framework dependencies are reused directly. When adding dependencies,
-scoped releases generate npm aliases to their scoped framework and plugin packages.</p>
+An existing JoltUI dependency is reused as installed. When adding dependencies,
+<code>init</code> installs the framework and plugin as npm aliases named <code>joltui</code> and <code>joltui-vite-plugin</code>
+(for example <code>"joltui": "npm:jolt-ui@^&lt;version&gt;"</code>), so generated code imports from <code>joltui</code>.</p>
 <h2 id="coding-agents">Coding agents<a class="headerlink" href="#coding-agents" title="Permanent link">&para;</a></h2>
 <p>Run <code>agents</code> from your application root. The optional agent name is <code>generic</code>
 (default), <code>codex</code>, or <code>claude</code>, case insensitive.</p>
