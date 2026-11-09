@@ -9,10 +9,9 @@ npx joltui agents claude
 ```
 
 `npm exec -- joltui init` is equivalent. `npm joltui init` is not an npm command.
-When using the scoped distribution, bootstrap with
-`npx --package=@pro/joltui joltui init`; configure your private registry first.
-The unqualified `npx joltui` works when the executable is installed locally, or
-when the package is published as `joltui` on your configured registry.
+The unqualified `npx joltui` works once JoltUI is installed locally
+(`npm install joltui@npm:jolt-ui`). Before that, run the executable from the npm
+package directly: `npx jolt-ui init` (equivalent to `npx --package=jolt-ui joltui init`).
 
 ## Create an application
 
@@ -45,8 +44,9 @@ npx joltui init my-app --yes --no-vite
 `--yes` accepts defaults and is required without an interactive terminal.
 `--no-install` writes files without running npm. Install failures retain the
 generated files so you can correct registry settings and rerun `npm install`.
-Existing scoped framework dependencies are reused directly. When adding dependencies,
-scoped releases generate npm aliases to their scoped framework and plugin packages.
+An existing JoltUI dependency is reused as installed. When adding dependencies,
+`init` installs the framework and plugin as npm aliases named `joltui` and `joltui-vite-plugin`
+(for example `"joltui": "npm:jolt-ui@^<version>"`), so generated code imports from `joltui`.
 
 ## Coding agents
 

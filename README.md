@@ -12,11 +12,15 @@ JoltUI does not require a virtual DOM. Components extend `HTMLElement`, are regi
 
 ## Installation
 
-Install the package from its package source:
+To install from the public npm registry (npmjs.com):
 
 ```bash
-npm install joltui
+npm install joltui@npm:jolt-ui
 ```
+
+On npm, JoltUI is published as `jolt-ui`. The `joltui@npm:jolt-ui` alias installs it
+under the name `joltui`, so imports stay `from "joltui"`. (A plain `npm install jolt-ui`
+works too, but then you import from `"jolt-ui"`.)
 
 For development inside this repository:
 
@@ -35,10 +39,11 @@ npm run dev:build
 
 ## Quick start
 
-Create a starter application interactively with `npx joltui init`.
+Create a starter application interactively with `npx joltui init`
+(or `npx jolt-ui init` before JoltUI is installed).
 Add framework guidance for coding agents with `npx joltui agents`, or
 `npx joltui agents claude` for Claude. See the [CLI guide](docs/getting-started/cli.md)
-for options and scoped-registry usage.
+for all options.
 
 Add an application container to the page:
 

@@ -8,13 +8,20 @@
 
 ## Create the project
 
+To install from the public npm registry (npmjs.com):
+
 ```sh
 mkdir my-app && cd my-app
 npm init -y
-npm install joltui
+npm install joltui@npm:jolt-ui
 npm install --save-dev typescript vite \
-    vite-plugin-typescript-transform joltui-vite-plugin
+    vite-plugin-typescript-transform joltui-vite-plugin@npm:jolt-ui-vite-plugin
 ```
+
+On npm, JoltUI is published as `jolt-ui`. The `joltui@npm:jolt-ui` alias installs it
+under the name `joltui`, so imports stay `from "joltui"`. (A plain `npm install jolt-ui`
+works too, but then you import from `"jolt-ui"`.)
+The Vite plugin is published on npm as `jolt-ui-vite-plugin` and installed the same way, as `joltui-vite-plugin`.
 
 - `joltui-vite-plugin` discovers pages automatically ([Vite plugin](../guide/vite-plugin.md)).
   It is optional; without it you list the pages on the router yourself.

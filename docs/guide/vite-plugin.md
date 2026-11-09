@@ -5,9 +5,14 @@ Listing every page in the router configuration is tedious and easy to get wrong.
 
 ## Installation
 
+To install from the public npm registry (npmjs.com):
+
 ```sh
-npm install --save-dev joltui-vite-plugin
+npm install --save-dev joltui-vite-plugin@npm:jolt-ui-vite-plugin
 ```
+
+The plugin is published on npm as `jolt-ui-vite-plugin`. The alias installs it under the
+name `joltui-vite-plugin`, which the imports below use.
 
 ```typescript title="vite.config.ts"
 import { defineConfig } from "vite";
@@ -110,10 +115,10 @@ joltui({
 | `exclude` | `.d.ts`, `.test.*`, `.spec.*`, `node_modules`, `dist` | Glob patterns to skip. |
 | `frameworkPackage` | `joltui` | Package that exports `page`, `component` and `registerGeneratedPages`. |
 
-!!! note "Scoped package names"
+!!! note "Installing JoltUI under another name"
 
-    If you install JoltUI under another name (for example from a private registry as
-    `@scope/joltui`), set `frameworkPackage` to that name so the plugin recognises the imports.
+    If you install JoltUI without the `joltui` alias (for example `npm install jolt-ui`),
+    set `frameworkPackage: "jolt-ui"` so the plugin recognises the imports.
 
 ## Development and watch mode
 
