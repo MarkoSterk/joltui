@@ -1,7 +1,7 @@
 # License
 
-JoltUI is released under the ISC License. The `joltui-vite-plugin` package is released under the
-MIT License.
+JoltUI is released under the ISC License. The Vite plugin (`jolt-ui-vite-plugin` on npm) is released
+under the MIT License.
 
 ```text
 ISC License

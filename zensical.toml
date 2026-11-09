@@ -91,6 +91,10 @@ version.alias = true
 icon = "fontawesome/brands/github"
 link = "https://github.com/MarkoSterk/joltui"
 
+[[project.extra.social]]
+icon = "fontawesome/brands/npm"
+link = "https://www.npmjs.com/package/jolt-ui"
+
 [project.theme]
 language = "en"
 logo = "assets/joltui-logo.svg"

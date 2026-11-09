@@ -77,6 +77,20 @@ methods, and the framework is extended by subclassing.
 JoltUI uses the **standard** TC39 decorators implemented by TypeScript 5, not the older
 `experimentalDecorators`.
 
+## Installation
+
+To install from the public npm registry (npmjs.com):
+
+```sh
+npm install joltui@npm:jolt-ui
+npm install --save-dev joltui-vite-plugin@npm:jolt-ui-vite-plugin
+```
+
+The packages are published on npm as [`jolt-ui`](https://www.npmjs.com/package/jolt-ui) and
+[`jolt-ui-vite-plugin`](https://www.npmjs.com/package/jolt-ui-vite-plugin). The aliases install
+them as `joltui` and `joltui-vite-plugin`, the names used throughout this documentation. The
+[installation guide](getting-started/installation.md) covers TypeScript and Vite configuration.
+
 ## Where to start
 
 <div class="grid cards" markdown>

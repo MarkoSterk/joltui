@@ -2,7 +2,9 @@
 
 ## Package versions
 
-JoltUI and `joltui-vite-plugin` follow [semantic versioning](https://semver.org):
+JoltUI ([`jolt-ui`](https://www.npmjs.com/package/jolt-ui) on npm) and its Vite plugin
+([`jolt-ui-vite-plugin`](https://www.npmjs.com/package/jolt-ui-vite-plugin)) follow
+[semantic versioning](https://semver.org):
 `major.minor.patch`.
 
 - **Before 1.0**, a minor release may contain breaking changes.
@@ -12,7 +14,7 @@ Pin versions in applications and read the release notes before upgrading a minor
 
 ## Documentation versions
 
-The documentation is versioned per **minor release** of the `joltui` package (`0.9`, `1.0`,
+The documentation is versioned per **minor release** of the `jolt-ui` package (`0.9`, `1.0`,
 `1.1`, ...). Patch releases update the documentation of their minor version.
 
 | Version | Content |
